@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Workout V4</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --bg-2: #121b2e;
+      --card: rgba(18, 27, 46, 0.94);
+      --card-2: rgba(24, 36, 61, 0.96);
+      --line: rgba(148, 163, 184, 0.16);
+      --text: #e5eefb;
+      --muted: #9fb0c9;
+      --accent: #4fd1ff;
+      --accent-2: #7cffb2;
+      --warning: #ffd166;
+      --danger: #ff7b8c;
+      --success: #3ddc97;
+      --shadow: 0 20px 50px rgba(0,0,0,.28);
+      --radius: 18px;
+      --radius-sm: 12px;
+      --radius-xs: 10px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body {
+      background-image:
+        radial-gradient(circle at top left, rgba(79, 209, 255, 0.12), transparent 38%),
+        radial-gradient(circle at bottom right, rgba(124, 255, 178, 0.09), transparent 35%),
+        linear-gradient(180deg, #0b1220 0%, #0d1527 100%);
+      -webkit-tap-highlight-color: transparent;
+      padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    }
+    button, input, select, textarea { font: inherit; }
+    button {
+      border: 0; cursor: pointer; color: inherit;
+      background: none;
+    }
+    input, select, textarea {
+      width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 12px 12px;
+      background: rgba(11,18,32,.78); color: var(--text);
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: rgba(79,209,255,.65);
+      box-shadow: 0 0 0 3px rgba(79,209,255,.12);
+    }
+    textarea { min-height: 96px; resize: vertical; }
+
+    .app {
+      max-width: 460px; margin: 0 auto; padding: 16px 14px 88px;
+    }
+
+    .glass {
+      background: linear-gradient(180deg, rgba(18,27,46,.96), rgba(14,21,38,.94));
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero {
+      padding: 18px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      margin-bottom: 12px;
+    }
+
+    .hero-top {
+      display: flex; justify-content: space-between; gap: 12px; align-items: flex-start;
+    }
+    .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--accent); font-weight: 700; }
+    .title { font-size: 28px; font-weight: 800; line-height: 1.05; margin: 4px 0 0; }
+    .subtle { color: var(--muted); font-size: 13px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px;
+      border-radius: 999px; background: rgba(79,209,255,.12); color: var(--accent); font-size: 12px; font-weight: 700;
+      white-space: nowrap;
+    }
+    .week-row {
+      display: grid; grid-template-columns: 1fr auto auto; gap: 10px; margin-top: 14px;
+      align-items: center;
+    }
+    .week-chooser {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      background: rgba(255,255,255,.03); padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line);
+    }
+    .icon-btn, .mini-btn, .cta, .ghost, .tab, .workout-choice {
+      transition: transform .12s ease, opacity .12s ease, background .12s ease, border-color .12s ease;
+    }
+    .icon-btn:active, .mini-btn:active, .cta:active, .ghost:active, .tab:active, .workout-choice:active { transform: scale(.98); }
+    .icon-btn {
+      width: 34px; height: 34px; border-radius: 10px; background: rgba(255,255,255,.05); border: 1px solid var(--line);
+      display: inline-flex; align-items: center; justify-content: center; font-weight: 800;
+    }
+    .mini-btn {
+      padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--line); font-weight: 700;
+    }
+    .cta {
+      width: 100%; padding: 14px 16px; border-radius: 14px; font-weight: 800;
+      background: linear-gradient(135deg, rgba(79,209,255,.95), rgba(124,255,178,.92)); color: #04131c;
+      box-shadow: 0 8px 24px rgba(79,209,255,.18);
+    }
+    .ghost {
+      width: 100%; padding: 14px 16px; border-radius: 14px; font-weight: 700; color: var(--text);
+      background: rgba(255,255,255,.04); border: 1px solid var(--line);
+    }
+
+    .tabs {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0 14px;
+    }
+    .tab {
+      padding: 12px 10px; border-radius: 14px; background: rgba(255,255,255,.04); border: 1px solid transparent;
+      color: var(--muted); font-size: 12px; font-weight: 700;
+    }
+    .tab.active {
+      color: var(--text); border-color: rgba(79,209,255,.4); background: rgba(79,209,255,.12);
+    }
+
+    .section { padding: 16px; margin-bottom: 12px; }
+    .section-title { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 14px; }
+    .section-title h2 { margin: 0; font-size: 17px; }
+    .section-title .hint { font-size: 12px; color: var(--muted); }
+
+    .stats {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+    }
+    .stat {
+      padding: 12px; border-radius: 14px; background: rgba(255,255,255,.04); border: 1px solid var(--line);
+    }
+    .stat strong { display: block; font-size: 18px; }
+    .stat span { color: var(--muted); font-size: 11px; }
+
+    .metrics-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+    }
+    .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: block; }
+
+    .workout-choices {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+    }
+    .workout-choice {
+      padding: 12px; border-radius: 14px; text-align: left; background: rgba(255,255,255,.04); border: 1px solid var(--line);
+    }
+    .workout-choice.active {
+      background: rgba(79,209,255,.12); border-color: rgba(79,209,255,.45);
+    }
+    .workout-choice b { display: block; }
+    .workout-choice small { color: var(--muted); }
+
+    .banner {
+      padding: 12px 14px; border-radius: 14px; background: rgba(255,209,102,.11); border: 1px solid rgba(255,209,102,.25);
+      color: #ffdf9a; font-size: 13px;
+    }
+    .banner.success {
+      background: rgba(61,220,151,.1); border-color: rgba(61,220,151,.24); color: #9ff4cb;
+    }
+
+    .exercise-card {
+      padding: 14px; border-radius: 16px; background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.025));
+      border: 1px solid var(--line); margin-bottom: 12px;
+    }
+    .exercise-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .exercise-name { font-size: 16px; font-weight: 800; margin: 0; }
+    .exercise-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .badge {
+      display: inline-flex; gap: 6px; align-items: center; padding: 6px 10px; border-radius: 999px;
+      background: rgba(255,255,255,.05); border: 1px solid var(--line); font-size: 11px; color: var(--muted); font-weight: 700;
+    }
+    .exercise-note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+
+    .history-chip {
+      padding: 10px 12px; border-radius: 12px; background: rgba(79,209,255,.08); border: 1px solid rgba(79,209,255,.25); margin-top: 12px;
+      font-size: 12px; color: #cceefe;
+    }
+
+    .exercise-tools { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 12px; }
+
+    .set-table { margin-top: 12px; display: grid; gap: 8px; }
+    .set-row {
+      display: grid; grid-template-columns: 44px 1fr 1fr 1fr; gap: 8px; align-items: center;
+      background: rgba(0,0,0,.14); border: 1px solid rgba(255,255,255,.05); border-radius: 14px; padding: 8px;
+    }
+    .set-index {
+      width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,.05); font-weight: 800; color: var(--muted);
+    }
+    .field-label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .08em; }
+    .set-row input { padding: 10px; text-align: center; }
+
+    .set-complete {
+      outline: 1px solid rgba(61,220,151,.25);
+      background: rgba(61,220,151,.07);
+    }
+
+    .footer-actions {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;
+    }
+
+    .list {
+      display: grid; gap: 10px;
+    }
+    .item {
+      border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: rgba(255,255,255,.035);
+    }
+    .item-row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+    .item-row strong { font-size: 15px; }
+    .item-row small, .muted { color: var(--muted); }
+    .vol { color: var(--accent-2); font-weight: 700; }
+
+    .segmented { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .segmented button.active { background: rgba(79,209,255,.12); border-color: rgba(79,209,255,.4); color: var(--text); }
+
+    .timer {
+      position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 40;
+      padding: 12px 14px; border-radius: 18px; display: none;
+    }
+    .timer.show { display: block; }
+    .timer-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .timer-time { font-size: 28px; font-weight: 800; }
+    .progress-track { height: 8px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 10px; }
+    .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+
+    .toast {
+      position: fixed; top: 14px; left: 50%; transform: translate(-50%, -10px); opacity: 0; pointer-events: none;
+      background: rgba(10,16,28,.95); color: var(--text); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: 999px;
+      padding: 10px 14px; font-weight: 700; z-index: 60; transition: all .22s ease;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    .hidden { display: none !important; }
+    .small { font-size: 12px; }
+    .danger { color: var(--danger); }
+
+    @media (max-width: 380px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .exercise-tools { grid-template-columns: 1fr; }
+      .set-row { grid-template-columns: 40px 1fr 1fr 1fr; }
+      .title { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="toast" class="toast"></div>
+  <div class="app">
+    <div class="hero glass">
+      <div class="hero-top">
+        <div>
+          <div class="eyebrow">Workout V4</div>
+          <div class="title">Coach + Logger</div>
+          <div class="subtle" id="todayLabel"></div>
+        </div>
+        <div class="pill" id="heroBadge">Week 1</div>
+      </div>
+      <div class="week-row">
+        <div class="week-chooser">
+          <button class="icon-btn" id="weekDown">−</button>
+          <div>
+            <div class="small muted">Program week</div>
+            <strong id="weekValue">1</strong>
+          </div>
+          <button class="icon-btn" id="weekUp">+</button>
+        </div>
+        <button class="mini-btn" id="jumpAutoBtn">Auto</button>
+        <button class="mini-btn" id="openTodayBtn">Today</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="today">Today</button>
+      <button class="tab" data-tab="history">History</button>
+      <button class="tab" data-tab="reference">Reference</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </div>
+
+    <main id="content"></main>
+  </div>
+
+  <div id="timerBar" class="timer glass">
+    <div class="timer-row">
+      <div>
+        <div class="small muted">Rest timer</div>
+        <div class="timer-time" id="timerTime">2:00</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="mini-btn" id="timerPlus">+30s</button>
+        <button class="mini-btn" id="timerPause">Pause</button>
+        <button class="mini-btn" id="timerClose">Close</button>
+      </div>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="timerFill"></div></div>
+  </div>
+
+  <script>
+
+const PROGRAMS = {
+  upperLower12: {
+    key: 'upperLower12',
+    title: '12-Week Upper / Lower Hypertrophy',
+    shortName: 'Upper / Lower',
+    deloadWeek: 7,
+    schedule: {
+      1: 'Upper A',
+      2: 'Lower A',
+      4: 'Upper B',
+      5: 'Lower B'
+    },
+    workouts: {
+      upperA: {
+        key: 'upperA',
+        dayNumber: 1,
+        day: 'Monday',
+        name: 'Upper A',
+        focus: 'Horizontal push / pull',
+        exercises: [
+          { name: 'Barbell Bench Press', sets: 4, repsMin: 5, repsMax: 8, rirTarget: 2, rest: 180, note: 'Main press. Add reps before load.', type: 'compound', region: 'upper', step: 5 },
+          { name: 'Chest-Supported Row', sets: 4, repsMin: 6, repsMax: 8, rirTarget: 2, rest: 180, type: 'compound', region: 'upper', step: 5 },
+          { name: 'Incline DB Press', sets: 3, repsMin: 8, repsMax: 10, rirTarget: 3, rest: 120, type: 'compound', region: 'upper', step: 5 },
+          { name: 'Lat Pulldown (V-bar)', sets: 3, repsMin: 8, repsMax: 10, rirTarget: 3, rest: 120, type: 'compound', region: 'upper', step: 5 },
+          { name: 'Face Pulls', sets: 2, repsMin: 12, repsMax: 15, rirTarget: 3, rest: 90, type: 'accessory', region: 'upper', step: 2.5 },
+          { name: 'Barbell Curl', sets: 2, repsMin: 8, repsMax: 10, rirTarget: 3, rest: 90, type: 'accessory', region: 'upper', step: 2.5 }
+        ]
+      },
+      lowerA: {
+        key: 'lowerA',
+        dayNumber: 2,
+        day: 'Tuesday',
+        name: 'Lower A',
+        focus: 'Quad focus',
+        exercises: [
+          { name: 'Horizontal Leg Press (Tippy)', sets: 4, repsMin: 6, repsMax: 8, rirTarget: 2, rest: 180, type: 'compound', region: 'lower', step: 10, note: 'Heels slightly raised. Drive through midfoot.' },
+          { name: 'Hack Squat / Leg Press Variant', sets: 3, repsMin: 8, repsMax: 10, rirTarget: 3, rest: 150, type: 'compound', region: 'lower', step: 10 },
+          { name: 'Leg Extension', sets: 3, repsMin: 10, repsMax: 12, rirTarget: 3, rest: 90, type: 'accessory', region: 'lower', step: 5 },
+          { name: 'Lying Leg Curl', sets: 3, repsMin: 8, repsMax: 10, rirTarget: 3, rest: 90, type: 'accessory', region: 'lower', step: 5 },
+          { name: 'Standing Calf Raise', sets: 3, repsMin: 10, repsMax: 12, rirTarget: 3, rest: 90, type: 'accessory', region: 'lower', step: 5 }
+        ]
+      },
+      upperB: {
+        key: 'upperB',
+        dayNumber: 4,
+        day: 'Thursday',
+        name: 'Upper B',
+        focus: 'Vertical push / pull',
+        exercises: [
+          { name: 'Seated Overhead Press', sets: 4, repsMin: 6, repsMax: 8, rirTarget: 2, rest: 180, type: 'compound', region: 'upper', step: 5 },
+          { name: 'Weighted Pull-up / Lat Pulldown', sets: 4, repsMin: 6, repsMax: 8, rirTarget: 2, rest: 180, type: 'compound', region: 'upper', step: 5 },
+          { name: 'Machine Chest Press', sets: 3, repsMin: 8, repsMax: 10, rirTarget: 3, rest: 120, type: 'compound', region: 'upper', step: 5 },
+          { name: 'Seated Cable Row', sets: 3, repsMin: 8, repsMax: 10, rirTarget: 3, rest: 120, type: 'compound', region: 'upper', step: 5 },
+          { name: 'Lateral Raise', sets: 2, repsMin: 12, repsMax: 15, rirTarget: 3, rest: 90, type: 'accessory', region: 'upper', step: 2.5 },
+          { name: 'Triceps Pushdown', sets: 2, repsMin: 10, repsMax: 12, rirTarget: 3, rest: 90, type: 'accessory', region: 'upper', step: 2.5 }
+        ]
+      },
+      lowerB: {
+        key: 'lowerB',
+        dayNumber: 5,
+        day: 'Friday',
+        name: 'Lower B',
+        focus: 'Posterior chain',
+        exercises: [
+          { name: 'Romanian Deadlift', sets: 3, repsMin: 8, repsMax: 10, rirTarget: 2, rest: 180, type: 'compound', region: 'lower', step: 10 },
+          { name: 'Bulgarian Split Squat', sets: 3, repsMin: 8, repsMax: 10, rirTarget: 3, rest: 150, type: 'compound', region: 'lower', step: 5, note: 'Per leg.' },
+          { name: 'Leg Press (Flat Foot)', sets: 3, repsMin: 10, repsMax: 12, rirTarget: 3, rest: 120, type: 'compound', region: 'lower', step: 10 },
+          { name: 'Seated Leg Curl', sets: 3, repsMin: 10, repsMax: 12, rirTarget: 3, rest: 90, type: 'accessory', region: 'lower', step: 5 },
+          { name: 'Seated Calf Raise', sets: 3, repsMin: 12, repsMax: 15, rirTarget: 3, rest: 90, type: 'accessory', region: 'lower', step: 5 }
+        ]
+      }
+    },
+    substitutions: {
+      'Barbell Bench Press': ['DB Bench Press', 'Machine Chest Press', 'Floor Press'],
+      'Chest-Supported Row': ['T-Bar Row', 'Chest-Supported DB Row', 'Machine Row'],
+      'Incline DB Press': ['Incline Machine Press', 'Incline Smith Press', 'Landmine Press'],
+      'Lat Pulldown (V-bar)': ['Neutral Grip Pull-up', 'Close-Grip Pulldown', 'Sternum Pulldown'],
+      'Face Pulls': ['Rear Delt Fly', 'Band Face Pull', 'Cable Y Raise'],
+      'Barbell Curl': ['EZ-Bar Curl', 'Cable Curl', 'Preacher Curl'],
+      'Horizontal Leg Press (Tippy)': ['45° Leg Press', 'Belt Squat', 'Hack Squat'],
+      'Hack Squat / Leg Press Variant': ['Front Squat', 'Safety Bar Squat', 'Goblet Squat'],
+      'Leg Extension': ['Sissy Squat', 'Spanish Squat', 'Single-Leg Leg Press'],
+      'Lying Leg Curl': ['Nordic Curl', 'Glute-Ham Raise', 'Good Morning'],
+      'Standing Calf Raise': ['Leg Press Calf Raise', 'Donkey Calf Raise', 'Single-Leg Calf Raise'],
+      'Seated Overhead Press': ['Machine Shoulder Press', 'Standing OHP', 'Landmine Press'],
+      'Weighted Pull-up / Lat Pulldown': ['Assisted Pull-up', 'Band-Assisted Chin-up', 'Inverted Row'],
+      'Machine Chest Press': ['Cable Chest Press', 'Weighted Push-Up', 'Smith Press'],
+      'Seated Cable Row': ['Machine Row', 'Supported DB Row', 'Meadows Row'],
+      'Lateral Raise': ['Cable Lateral Raise', 'Machine Lateral Raise', 'DB Partial Raise'],
+      'Triceps Pushdown': ['Skull Crusher', 'Overhead Triceps Extension', 'JM Press'],
+      'Romanian Deadlift': ['Trap Bar RDL', 'Stiff-Leg Deadlift', 'Good Morning'],
+      'Bulgarian Split Squat': ['Walking Lunge', 'Step-Up', 'Rear Foot Elevated Split Squat'],
+      'Leg Press (Flat Foot)': ['45° Leg Press', 'Hack Squat', 'Goblet Squat'],
+      'Seated Leg Curl': ['Glute-Ham Raise', 'Nordic Curl', 'Good Morning'],
+      'Seated Calf Raise': ['Single-Leg Calf Raise', '45° Calf Raise', 'Deficit Calf Raise']
+    },
+    checklist: [
+      'Warm up with 2–3 progressive sets before the first heavy movement.',
+      'Stay around 2–3 RIR on most working sets.',
+      'Use 2–3 second eccentrics and controlled lockouts.',
+      'When all sets hit the top of the rep range cleanly, increase load next time.',
+      'If you stall for 2 sessions, hold or reduce the load slightly.',
+      'Deload on week 7 with roughly half the usual volume and keep technique sharp.',
+      'Protein, sleep, hydration, and consistency matter more than app complexity.'
+    ],
+    recoveryNote: 'Wednesday / Weekend: walk, mobility, low-stress cardio, or run a missed session manually.'
+  },
+  glutePullPush: {
+    key: 'glutePullPush',
+    title: '12-Week Glute / Pull / Legs / Push',
+    shortName: 'Glute Split',
+    deloadWeek: 7,
+    schedule: {
+      1: 'Day 1 – Glutes',
+      2: 'Day 2 – Back & Biceps',
+      4: 'Day 4 – Quads & Hamstrings',
+      5: 'Day 5 – Chest, Shoulders & Triceps'
+    },
+    workouts: {
+      glutes: {
+        key: 'glutes',
+        dayNumber: 1,
+        day: 'Monday',
+        name: 'Day 1 – Glutes',
+        focus: 'Glute bias',
+        exercises: [
+          { name: 'Hip Thrusts', sets: 4, repsMin: 6, repsMax: 8, intensityType: 'rpe', intensityMin: 7, intensityMax: 9, rest: 180, type: 'compound', region: 'lower', step: 10 },
+          { name: 'Bulgarian Split Squats', sets: 3, repsMin: 8, repsMax: 10, intensityType: 'rpe', intensityMin: 8, intensityMax: 8, rest: 150, type: 'compound', region: 'lower', step: 5, note: 'Per leg.' },
+          { name: 'Romanian Deadlifts', sets: 3, repsMin: 8, repsMax: 10, intensityType: 'rpe', intensityMin: 7, intensityMax: 9, rest: 180, type: 'compound', region: 'lower', step: 10 },
+          { name: 'Glute Kickbacks', sets: 2, repsMin: 12, repsMax: 15, intensityType: 'special', intensityLabel: 'Failure', intensityHint: 'Set 2 to true failure', rest: 75, type: 'accessory', region: 'lower', step: 5, note: 'Set 2 goes to true failure.' }
+        ]
+      },
+      backBiceps: {
+        key: 'backBiceps',
+        dayNumber: 2,
+        day: 'Tuesday',
+        name: 'Day 2 – Back & Biceps',
+        focus: 'Vertical + horizontal pull',
+        exercises: [
+          { name: 'Lat Pulldowns', sets: 4, repsMin: 6, repsMax: 10, intensityType: 'rpe', intensityMin: 7, intensityMax: 9, rest: 150, type: 'compound', region: 'upper', step: 5 },
+          { name: 'Rows', sets: 4, repsMin: 6, repsMax: 10, intensityType: 'rpe', intensityMin: 7, intensityMax: 9, rest: 150, type: 'compound', region: 'upper', step: 5 },
+          { name: 'Straight-Arm Pulldowns', sets: 2, repsMin: 10, repsMax: 15, intensityType: 'rpe', intensityMin: 8, intensityMax: 8, rest: 90, type: 'accessory', region: 'upper', step: 5 },
+          { name: 'Hammer Curls', sets: 2, repsMin: 10, repsMax: 12, intensityType: 'special', intensityLabel: 'Failure', intensityHint: 'Set 2 to true failure', rest: 75, type: 'accessory', region: 'upper', step: 2.5, note: 'Set 2 goes to true failure.' },
+          { name: 'Biceps Curls', sets: 2, repsMin: 10, repsMax: 12, intensityType: 'special', intensityLabel: 'Failure', intensityHint: 'Set 2 to true failure', rest: 75, type: 'accessory', region: 'upper', step: 2.5, note: 'Set 2 goes to true failure.' }
+        ]
+      },
+      quadsHamstrings: {
+        key: 'quadsHamstrings',
+        dayNumber: 4,
+        day: 'Thursday',
+        name: 'Day 4 – Quads & Hamstrings',
+        focus: 'Quad + hamstring bias',
+        exercises: [
+          { name: 'Leg Press', sets: 4, repsMin: 6, repsMax: 10, intensityType: 'rpe', intensityMin: 7, intensityMax: 9, rest: 180, type: 'compound', region: 'lower', step: 10 },
+          { name: 'Hip Thrusts', sets: 3, repsMin: 8, repsMax: 10, intensityType: 'rpe', intensityMin: 7, intensityMax: 8, rest: 150, type: 'compound', region: 'lower', step: 10 },
+          { name: 'Hamstring Curls', sets: 3, repsMin: 10, repsMax: 12, intensityType: 'special', intensityLabel: 'Failure', intensityHint: 'Set 3 to true failure', rest: 90, type: 'accessory', region: 'lower', step: 5, note: 'Set 3 goes to true failure.' },
+          { name: 'Leg Extensions', sets: 3, repsMin: 10, repsMax: 12, intensityType: 'special', intensityLabel: 'Failure', intensityHint: 'Set 3 to true failure', rest: 90, type: 'accessory', region: 'lower', step: 5, note: 'Set 3 goes to true failure.' },
+          { name: 'Step-Ups', sets: 2, repsMin: 8, repsMax: 10, intensityType: 'special', intensityLabel: 'RPE 8 + fail', intensityHint: 'Set 1 at RPE 8, set 2 to true failure', rest: 120, type: 'compound', region: 'lower', step: 5, note: 'Per leg. Set 1 around RPE 8, set 2 to true failure.' }
+        ]
+      },
+      push: {
+        key: 'push',
+        dayNumber: 5,
+        day: 'Friday',
+        name: 'Day 5 – Chest, Shoulders & Triceps',
+        focus: 'Pressing + triceps',
+        exercises: [
+          { name: 'Flat Press', sets: 4, repsMin: 6, repsMax: 8, intensityType: 'rpe', intensityMin: 7, intensityMax: 9, rest: 180, type: 'compound', region: 'upper', step: 5 },
+          { name: 'Chest Flies', sets: 3, repsMin: 10, repsMax: 15, intensityType: 'special', intensityLabel: 'Failure', intensityHint: 'Set 3 to true failure', rest: 75, type: 'accessory', region: 'upper', step: 2.5, note: 'Set 3 goes to true failure.' },
+          { name: 'Shoulder Press', sets: 3, repsMin: 8, repsMax: 10, intensityType: 'rpe', intensityMin: 7, intensityMax: 9, rest: 150, type: 'compound', region: 'upper', step: 5 },
+          { name: 'Skull Crushers', sets: 2, repsMin: 10, repsMax: 12, intensityType: 'special', intensityLabel: 'Failure', intensityHint: 'Set 2 to true failure', rest: 75, type: 'accessory', region: 'upper', step: 2.5, note: 'Set 2 goes to true failure.' },
+          { name: 'Triceps Pushdowns', sets: 2, repsMin: 10, repsMax: 15, intensityType: 'special', intensityLabel: 'Failure', intensityHint: 'Set 2 to true failure', rest: 75, type: 'accessory', region: 'upper', step: 2.5, note: 'Set 2 goes to true failure.' },
+          { name: 'Upright Rows', sets: 2, repsMin: 10, repsMax: 12, intensityType: 'special', intensityLabel: 'Failure', intensityHint: 'Set 2 to true failure', rest: 75, type: 'accessory', region: 'upper', step: 2.5, note: 'Set 2 goes to true failure.' }
+        ]
+      }
+    },
+    substitutions: {
+      'Hip Thrusts': ['Barbell Hip Thrust', 'Smith Hip Thrust', 'Glute Bridge'],
+      'Bulgarian Split Squats': ['Step-Up', 'Walking Lunge', 'Rear Foot Elevated Split Squat'],
+      'Romanian Deadlifts': ['DB Romanian Deadlift', 'Trap Bar RDL', 'Stiff-Leg Deadlift'],
+      'Glute Kickbacks': ['Cable Kickback', 'Machine Kickback', '45° Back Extension'],
+      'Lat Pulldowns': ['Neutral-Grip Pulldown', 'Assisted Pull-Up', 'Pull-Up'],
+      'Rows': ['Chest-Supported Row', 'Seated Cable Row', 'Machine Row'],
+      'Straight-Arm Pulldowns': ['Cable Pullover', 'Dumbbell Pullover', 'Band Pulldown'],
+      'Hammer Curls': ['DB Hammer Curl', 'Rope Hammer Curl', 'Cross-Body Hammer Curl'],
+      'Biceps Curls': ['EZ-Bar Curl', 'Cable Curl', 'Preacher Curl'],
+      'Leg Press': ['Hack Squat', 'Pendulum Squat', 'Belt Squat'],
+      'Hamstring Curls': ['Seated Leg Curl', 'Lying Leg Curl', 'Nordic Curl'],
+      'Leg Extensions': ['Single-Leg Extension', 'Spanish Squat', 'Sissy Squat'],
+      'Step-Ups': ['Walking Lunge', 'Bulgarian Split Squat', 'Reverse Lunge'],
+      'Flat Press': ['Barbell Bench Press', 'DB Bench Press', 'Machine Chest Press'],
+      'Chest Flies': ['Cable Fly', 'Pec Deck', 'Incline Cable Fly'],
+      'Shoulder Press': ['Machine Shoulder Press', 'Seated DB Press', 'Arnold Press'],
+      'Skull Crushers': ['EZ-Bar Skull Crusher', 'Overhead Triceps Extension', 'JM Press'],
+      'Triceps Pushdowns': ['Rope Pushdown', 'Straight-Bar Pushdown', 'Cross-Body Pushdown'],
+      'Upright Rows': ['Cable Upright Row', 'DB Upright Row', 'High Pull']
+    },
+    checklist: [
+      'Main lifts live in the lower rep ranges; chase cleaner reps before adding load.',
+      'For RPE-based work, stay inside the target range instead of forcing PRs every session.',
+      'For the exercises marked true failure, only the listed final set should go all the way.',
+      'Use Wednesday for rest, walking, or light cardio so Thursday and Friday stay high quality.',
+      'Deload on week 7 by cutting volume roughly in half and keeping bar speed clean.',
+      'Keep notes when a substitution feels better so the history tab stays meaningful.'
+    ],
+    recoveryNote: 'Day 3 is rest or light cardio. Weekend can be full recovery or a make-up session.'
+  }
+};
+
+const STORAGE_KEY = 'workout_v4_state';
+const LEGACY_STORAGE_KEY = 'workout_v3_state';
+const defaultState = {
+  version: 4,
+  currentWeek: 1,
+  selectedProgramKey: 'glutePullPush',
+  selectedWorkoutKey: '',
+  activeTab: 'today',
+  metricsByDate: {},
+  drafts: {},
+  logs: []
+};
+
+let state = loadState();
+let timer = { duration: 0, remaining: 0, running: false, label: '', intervalId: null };
+
+function currentProgram() {
+  return PROGRAMS[state.selectedProgramKey] || PROGRAMS.glutePullPush;
+}
+
+function loadState() {
+  try {
+    const currentRaw = localStorage.getItem(STORAGE_KEY);
+    const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+    const raw = currentRaw || legacyRaw;
+    if (!raw) return structuredClone(defaultState);
+    const parsed = JSON.parse(raw);
+    const merged = { ...structuredClone(defaultState), ...parsed };
+    return migrateState(merged);
+  } catch (err) {
+    console.error(err);
+    return structuredClone(defaultState);
+  }
+}
+
+function migrateState(inputState) {
+  const next = { ...structuredClone(defaultState), ...inputState };
+  if (!PROGRAMS[next.selectedProgramKey]) {
+    next.selectedProgramKey = next.selectedProgramKey || 'glutePullPush';
+    if (!PROGRAMS[next.selectedProgramKey]) next.selectedProgramKey = 'glutePullPush';
+  }
+  next.drafts = next.drafts || {};
+  next.logs = Array.isArray(next.logs) ? next.logs : [];
+  Object.values(next.drafts).forEach(draft => {
+    if (!draft.programKey) draft.programKey = inferProgramKeyFromWorkoutKey(draft.workoutKey);
+  });
+  next.logs = next.logs.map(log => ({
+    ...log,
+    programKey: log.programKey || inferProgramKeyFromWorkoutKey(log.workoutKey)
+  }));
+  return next;
+}
+
+function inferProgramKeyFromWorkoutKey(workoutKey) {
+  if (!workoutKey) return 'glutePullPush';
+  const matched = Object.values(PROGRAMS).find(program => program.workouts[workoutKey]);
+  return matched ? matched.key : 'glutePullPush';
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function structuredClone(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+function todayISO() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().split('T')[0];
+}
+
+function prettyDate(dateString) {
+  const date = dateString ? new Date(dateString + 'T12:00:00') : new Date();
+  return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function orderedWorkoutKeys(program = currentProgram()) {
+  return Object.values(program.workouts)
+    .sort((a, b) => (a.dayNumber || 0) - (b.dayNumber || 0))
+    .map(workout => workout.key);
+}
+
+function getCurrentAutoWorkoutKey(program = currentProgram()) {
+  const today = new Date().getDay();
+  const scheduleDays = Object.values(program.workouts)
+    .map(workout => ({ key: workout.key, dayNumber: workout.dayNumber }))
+    .sort((a, b) => a.dayNumber - b.dayNumber);
+
+  const exact = scheduleDays.find(entry => entry.dayNumber === today);
+  if (exact) return exact.key;
+
+  const next = scheduleDays.find(entry => entry.dayNumber > today);
+  return (next || scheduleDays[0] || {}).key || orderedWorkoutKeys(program)[0];
+}
+
+function clampWeek(value) {
+  return Math.max(1, Math.min(12, value));
+}
+
+function ensureWorkoutSelection() {
+  const program = currentProgram();
+  if (!state.selectedWorkoutKey || !program.workouts[state.selectedWorkoutKey]) {
+    state.selectedWorkoutKey = getCurrentAutoWorkoutKey(program);
+  }
+}
+
+ensureWorkoutSelection();
+
+function getDraftKey(date = todayISO(), week = state.currentWeek, programKey = state.selectedProgramKey, workoutKey = state.selectedWorkoutKey) {
+  return `${date}__w${week}__${programKey}__${workoutKey}`;
+}
+
+function hasDeload(program = currentProgram()) {
+  return Number(program.deloadWeek) > 0;
+}
+
+function getTargetSets(exercise, program = currentProgram()) {
+  if (!hasDeload(program) || state.currentWeek !== program.deloadWeek) return exercise.sets;
+  return Math.max(1, Math.ceil(exercise.sets / 2));
+}
+
+function buildEmptyDraft(programKey, workoutKey) {
+  const program = PROGRAMS[programKey];
+  const workout = program.workouts[workoutKey];
+  return {
+    key: getDraftKey(todayISO(), state.currentWeek, programKey, workoutKey),
+    date: todayISO(),
+    week: state.currentWeek,
+    programKey,
+    workoutKey,
+    notes: '',
+    savedAt: null,
+    exercises: workout.exercises.map((exercise) => ({
+      originalName: exercise.name,
+      actualName: exercise.name,
+      sets: Array.from({ length: getTargetSets(exercise, program) }, () => ({ weight: '', reps: '', rir: '' }))
+    }))
+  };
+}
+
+function getCurrentDraft() {
+  const key = getDraftKey();
+  const existing = state.drafts[key];
+  if (existing) return existing;
+  const created = buildEmptyDraft(state.selectedProgramKey, state.selectedWorkoutKey);
+  state.drafts[key] = created;
+  saveState();
+  return created;
+}
+
+function getWorkoutProgress(draft) {
+  let completed = 0;
+  let total = 0;
+  draft.exercises.forEach((exercise) => {
+    exercise.sets.forEach((set) => {
+      total += 1;
+      if (Number(set.weight) > 0 && Number(set.reps) > 0) completed += 1;
+    });
+  });
+  return { completed, total };
+}
+
+function getSessionVolume(exerciseLog) {
+  return exerciseLog.sets.reduce((sum, set) => sum + ((Number(set.weight) || 0) * (Number(set.reps) || 0)), 0);
+}
+
+function getAllExerciseLogsByName(name) {
+  const matches = [];
+  state.logs.forEach((session) => {
+    session.exercises.forEach((exercise, index) => {
+      if (exercise.actualName === name || exercise.originalName === name) {
+        matches.push({ session, exercise, index });
+      }
+    });
+  });
+  return matches.sort((a, b) => (a.session.date < b.session.date ? 1 : -1));
+}
+
+function summarizeSetPattern(sets) {
+  const clean = sets.filter(s => Number(s.weight) > 0 || Number(s.reps) > 0);
+  if (!clean.length) return 'No logged sets yet';
+  const weights = clean.map(s => Number(s.weight) || 0).filter(Boolean);
+  const reps = clean.map(s => Number(s.reps) || 0).filter(Boolean);
+  const weightText = weights.length ? weights.join(' / ') : '—';
+  const repText = reps.length ? reps.join(' / ') : '—';
+  return `${weightText} lb × ${repText}`;
+}
+
+function getMostCommonWeight(sets) {
+  const values = sets.map(s => Number(s.weight)).filter(v => v > 0);
+  if (!values.length) return 0;
+  const counts = {};
+  values.forEach(v => counts[v] = (counts[v] || 0) + 1);
+  return Number(Object.entries(counts).sort((a, b) => b[1] - a[1] || Number(b[0]) - Number(a[0]))[0][0]);
+}
+
+function roundLoad(value) {
+  return Number.isInteger(value) ? value : Math.round(value * 2) / 2;
+}
+
+function getExerciseTemplate(programKey, workoutKey, exerciseIndex) {
+  return PROGRAMS[programKey].workouts[workoutKey].exercises[exerciseIndex];
+}
+
+function getLastPerformance(currentActualName, fallbackOriginalName) {
+  const byActual = getAllExerciseLogsByName(currentActualName);
+  if (byActual.length) return { source: currentActualName, entry: byActual[0] };
+  const byOriginal = getAllExerciseLogsByName(fallbackOriginalName);
+  if (byOriginal.length) return { source: fallbackOriginalName, entry: byOriginal[0] };
+  return null;
+}
+
+function getLoggedEffort(set) {
+  return Number(set.rir);
+}
+
+function getEffortBadge(template) {
+  if (template.intensityType === 'rpe') {
+    return `RPE ${template.intensityMin}-${template.intensityMax}`;
+  }
+  if (template.intensityType === 'special') {
+    return template.intensityLabel || 'Special';
+  }
+  return `RIR ${template.rirTarget}`;
+}
+
+function getEffortFieldLabel(template) {
+  if (template.intensityType === 'rpe') return 'RPE';
+  if (template.intensityType === 'special') return 'Effort';
+  return 'RIR';
+}
+
+function getEffortPlaceholder(template) {
+  if (template.intensityType === 'rpe') return `${template.intensityMin}-${template.intensityMax}`;
+  if (template.intensityType === 'special') return template.intensityHint ? 'notes' : 'effort';
+  return String(template.rirTarget);
+}
+
+function shouldIncrease(sets, template) {
+  const validSets = sets.filter(s => Number(s.weight) > 0 && Number(s.reps) > 0);
+  const allAtTop = validSets.length && validSets.every(s => Number(s.reps) >= template.repsMax);
+  if (!allAtTop) return false;
+
+  if (template.intensityType === 'rpe') {
+    const efforts = validSets.map(getLoggedEffort).filter(v => v > 0);
+    if (!efforts.length) return true;
+    const avg = efforts.reduce((sum, value) => sum + value, 0) / efforts.length;
+    return avg <= template.intensityMax;
+  }
+
+  if (template.intensityType === 'special') {
+    return true;
+  }
+
+  const efforts = validSets.map(getLoggedEffort).filter(v => v >= 0);
+  const avg = efforts.length ? efforts.reduce((sum, value) => sum + value, 0) / efforts.length : template.rirTarget;
+  return avg <= (template.rirTarget + 0.5);
+}
+
+function calculateSuggestion(currentExercise, template) {
+  const last = getLastPerformance(currentExercise.actualName, currentExercise.originalName);
+  if (!last) return { value: '', label: 'No prior data yet' };
+  const previous = last.entry.exercise;
+  const baseWeight = getMostCommonWeight(previous.sets);
+  if (!baseWeight) return { value: '', label: 'Previous session had no load recorded' };
+
+  const sets = previous.sets.filter(s => Number(s.weight) > 0 && Number(s.reps) > 0);
+  const shouldIncreaseLoad = shouldIncrease(sets, template);
+  const suggested = shouldIncreaseLoad ? roundLoad(baseWeight + (template.step || 5)) : baseWeight;
+  const loadStep = template.step || 5;
+  let label = shouldIncreaseLoad ? `Last time met the target. Try +${loadStep}.` : 'Repeat last working load and beat reps.';
+  if (template.intensityType === 'special' && template.intensityHint) {
+    label += ` ${template.intensityHint}.`;
+  }
+  return { value: suggested, label };
+}
+
+function setMetricField(field, value) {
+  const date = todayISO();
+  if (!state.metricsByDate[date]) state.metricsByDate[date] = { sleep: '', energy: '', soreness: '', bodyweight: '' };
+  state.metricsByDate[date][field] = value;
+  saveState();
+}
+
+function activeWeekCount() {
+  return state.logs.filter(log => log.week === state.currentWeek && log.programKey === state.selectedProgramKey).length;
+}
+
+function getStats() {
+  const totalSessions = state.logs.length;
+  let totalVolume = 0;
+  let totalSets = 0;
+  const prs = {};
+  let prCount = 0;
+  state.logs.forEach(session => {
+    session.exercises.forEach(ex => {
+      totalVolume += getSessionVolume(ex);
+      ex.sets.forEach(set => {
+        if (Number(set.weight) > 0 && Number(set.reps) > 0) totalSets += 1;
+        const key = ex.actualName;
+        const score = Number(set.weight) || 0;
+        if (score > (prs[key] || 0)) {
+          if (prs[key] !== undefined) prCount += 1;
+          prs[key] = score;
+        }
+      });
+    });
+  });
+  return {
+    totalSessions,
+    totalSets,
+    totalVolume: Math.round(totalVolume),
+    prCount,
+    thisWeek: activeWeekCount()
+  };
+}
+
+function showToast(message) {
+  const el = document.getElementById('toast');
+  el.textContent = message;
+  el.classList.add('show');
+  clearTimeout(showToast._id);
+  showToast._id = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+function haptic(pattern = [18]) {
+  if (navigator.vibrate) navigator.vibrate(pattern);
+}
+
+function formatTime(totalSeconds) {
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
+function startTimer(duration, label) {
+  clearInterval(timer.intervalId);
+  timer = { duration, remaining: duration, running: true, label, intervalId: null };
+  updateTimerUI();
+  timer.intervalId = setInterval(() => {
+    if (!timer.running) return;
+    timer.remaining -= 1;
+    if (timer.remaining <= 0) {
+      timer.remaining = 0;
+      timer.running = false;
+      clearInterval(timer.intervalId);
+      haptic([120, 50, 120]);
+      showToast(`${label || 'Rest'} complete`);
+    }
+    updateTimerUI();
+  }, 1000);
+}
+
+function updateTimerUI() {
+  const bar = document.getElementById('timerBar');
+  const time = document.getElementById('timerTime');
+  const fill = document.getElementById('timerFill');
+  const pause = document.getElementById('timerPause');
+  if (!timer.duration) {
+    bar.classList.remove('show');
+    return;
+  }
+  bar.classList.add('show');
+  time.textContent = formatTime(timer.remaining);
+  fill.style.width = `${Math.max(0, ((timer.duration - timer.remaining) / timer.duration) * 100)}%`;
+  pause.textContent = timer.running ? 'Pause' : 'Resume';
+}
+
+function closeTimer() {
+  clearInterval(timer.intervalId);
+  timer = { duration: 0, remaining: 0, running: false, label: '', intervalId: null };
+  updateTimerUI();
+}
+
+function updateDraftField(exerciseIndex, setIndex, field, value) {
+  const draft = getCurrentDraft();
+  draft.exercises[exerciseIndex].sets[setIndex][field] = value;
+  saveState();
+}
+
+function updateActualName(exerciseIndex, value) {
+  const draft = getCurrentDraft();
+  draft.exercises[exerciseIndex].actualName = value;
+  saveState();
+  render();
+}
+
+function updateNotes(value) {
+  const draft = getCurrentDraft();
+  draft.notes = value;
+  saveState();
+}
+
+function applyWeightStrategy(exerciseIndex, type) {
+  const draft = getCurrentDraft();
+  const exercise = draft.exercises[exerciseIndex];
+  const template = getExerciseTemplate(draft.programKey, draft.workoutKey, exerciseIndex);
+  const last = getLastPerformance(exercise.actualName, exercise.originalName);
+  if (!last) {
+    showToast('No previous session for that exercise yet');
+    return;
+  }
+  const lastSets = last.entry.exercise.sets;
+  const suggestion = calculateSuggestion(exercise, template);
+
+  exercise.sets.forEach((set, idx) => {
+    if (type === 'repeat') {
+      const prev = lastSets[idx] || lastSets[lastSets.length - 1] || {};
+      set.weight = prev.weight || set.weight;
+    } else {
+      if (suggestion.value) set.weight = suggestion.value;
+    }
+  });
+  saveState();
+  render();
+  showToast(type === 'repeat' ? 'Repeated last loads' : 'Filled suggested load');
+}
+
+function saveSession() {
+  const draft = structuredClone(getCurrentDraft());
+  draft.savedAt = new Date().toISOString();
+  draft.programKey = state.selectedProgramKey;
+  const metrics = state.metricsByDate[draft.date] || {};
+  const session = { ...draft, metrics };
+  const existingIdx = state.logs.findIndex(log => log.key === session.key);
+  if (existingIdx >= 0) state.logs[existingIdx] = session;
+  else state.logs.unshift(session);
+  saveState();
+  haptic([20, 40, 20]);
+  showToast('Workout saved');
+  render();
+}
+
+function exportData() {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    app: 'Workout V4',
+    data: state
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `workout-v4-backup-${todayISO()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (!parsed.data) throw new Error('Invalid file');
+      state = migrateState(parsed.data);
+      ensureWorkoutSelection();
+      saveState();
+      render();
+      showToast('Backup imported');
+    } catch (err) {
+      console.error(err);
+      showToast('Import failed');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function resetAllData() {
+  if (!confirm('Clear all workout data, drafts, history, and settings?')) return;
+  state = structuredClone(defaultState);
+  ensureWorkoutSelection();
+  saveState();
+  render();
+  showToast('All data cleared');
+}
+
+function getHistoryItems(filterName = '') {
+  const rows = [];
+  state.logs.forEach(session => {
+    session.exercises.forEach(exercise => {
+      const name = exercise.actualName;
+      if (filterName && name !== filterName) return;
+      const program = PROGRAMS[session.programKey] || currentProgram();
+      rows.push({
+        name,
+        originalName: exercise.originalName,
+        workout: program.workouts[session.workoutKey]?.name || session.workoutKey,
+        programName: program.shortName || program.title,
+        date: session.date,
+        week: session.week,
+        summary: summarizeSetPattern(exercise.sets),
+        volume: Math.round(getSessionVolume(exercise))
+      });
+    });
+  });
+  return rows.sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+
+function getHistoryOptions() {
+  const names = new Set();
+  state.logs.forEach(session => session.exercises.forEach(ex => names.add(ex.actualName)));
+  return [...names].sort();
+}
+
+function renderProgramSelector() {
+  return `
+    <div>
+      <label class="label">Program</label>
+      <select id="programSelector">
+        ${Object.values(PROGRAMS).map(program => `
+          <option value="${program.key}" ${program.key === state.selectedProgramKey ? 'selected' : ''}>${escapeHtml(program.title)}</option>
+        `).join('')}
+      </select>
+    </div>
+  `;
+}
+
+function renderTodayTab() {
+  const program = currentProgram();
+  const workout = program.workouts[state.selectedWorkoutKey];
+  const draft = getCurrentDraft();
+  const progress = getWorkoutProgress(draft);
+  const today = new Date().getDay();
+  const isScheduled = getCurrentAutoWorkoutKey(program) === state.selectedWorkoutKey && Object.values(program.workouts).some(item => item.dayNumber === today);
+  const isDeload = hasDeload(program) && state.currentWeek === program.deloadWeek;
+  const metrics = state.metricsByDate[todayISO()] || { sleep: '', energy: '', soreness: '', bodyweight: '' };
+  const stats = getStats();
+
+  let html = `
+    <section class="section glass">
+      <div class="section-title">
+        <div>
+          <h2>${program.title}</h2>
+          <div class="hint">${workout.name} • ${workout.focus}</div>
+        </div>
+        <div class="pill">${progress.completed}/${progress.total} sets</div>
+      </div>
+      <div class="metrics-grid" style="margin-bottom:12px;">
+        ${renderProgramSelector()}
+        <div>
+          <label class="label">Week status</label>
+          <div class="week-chooser">
+            <div>
+              <div class="small muted">Current block</div>
+              <strong>Week ${state.currentWeek}</strong>
+            </div>
+            <div class="small muted">${isDeload ? 'Deload' : 'Build'}</div>
+          </div>
+        </div>
+      </div>
+      ${isDeload ? `<div class="banner">Week ${program.deloadWeek} deload active: volume is automatically reduced to keep recovery high.</div>` : ''}
+      ${!isScheduled ? `<div class="banner success" style="margin-top:${isDeload ? 10 : 0}px;">Today is not a scheduled ${workout.name} day, but you can still run it manually.</div>` : ''}
+      <div class="workout-choices" style="margin-top:12px;">
+        ${Object.values(program.workouts)
+          .sort((a, b) => (a.dayNumber || 0) - (b.dayNumber || 0))
+          .map(w => `
+            <button class="workout-choice ${w.key === state.selectedWorkoutKey ? 'active' : ''}" data-workout="${w.key}">
+              <b>${w.name}</b>
+              <small>${w.day}</small>
+            </button>
+          `).join('')}
+      </div>
+    </section>
+
+    <section class="section glass">
+      <div class="section-title">
+        <h2>Daily readiness</h2>
+        <div class="hint">Fast check-in</div>
+      </div>
+      <div class="metrics-grid">
+        <div>
+          <label class="label">Sleep (hrs)</label>
+          <input type="number" step="0.5" min="0" max="14" id="metric_sleep" value="${metrics.sleep || ''}" placeholder="7.5" />
+        </div>
+        <div>
+          <label class="label">Bodyweight</label>
+          <input type="number" step="0.1" min="0" id="metric_bodyweight" value="${metrics.bodyweight || ''}" placeholder="185.0" />
+        </div>
+        <div>
+          <label class="label">Energy (1-5)</label>
+          <input type="number" min="1" max="5" id="metric_energy" value="${metrics.energy || ''}" placeholder="4" />
+        </div>
+        <div>
+          <label class="label">Soreness (1-5)</label>
+          <input type="number" min="1" max="5" id="metric_soreness" value="${metrics.soreness || ''}" placeholder="2" />
+        </div>
+      </div>
+    </section>
+
+    <section class="section glass">
+      <div class="section-title">
+        <h2>Today dashboard</h2>
+        <div class="hint">At-a-glance</div>
+      </div>
+      <div class="stats">
+        <div class="stat"><strong>${stats.thisWeek}</strong><span>saved this week</span></div>
+        <div class="stat"><strong>${stats.totalSessions}</strong><span>sessions</span></div>
+        <div class="stat"><strong>${stats.totalSets}</strong><span>logged sets</span></div>
+        <div class="stat"><strong>${stats.prCount}</strong><span>new PRs</span></div>
+      </div>
+    </section>
+  `;
+
+  html += `<section class="section glass"><div class="section-title"><h2>Workout</h2><div class="hint">Last session + suggestion built in</div></div>`;
+
+  draft.exercises.forEach((exercise, exerciseIndex) => {
+    const template = getExerciseTemplate(draft.programKey, draft.workoutKey, exerciseIndex);
+    const last = getLastPerformance(exercise.actualName, exercise.originalName);
+    const suggestion = calculateSuggestion(exercise, template);
+    const subs = [exercise.originalName, ...(program.substitutions[exercise.originalName] || [])];
+    const completeSets = exercise.sets.filter(set => Number(set.weight) > 0 && Number(set.reps) > 0).length;
+
+    html += `
+      <article class="exercise-card" data-exercise-card="${exerciseIndex}">
+        <div class="exercise-head">
+          <div>
+            <h3 class="exercise-name">${exercise.actualName}</h3>
+            <div class="exercise-meta">
+              <span class="badge">${getTargetSets(template, program)} × ${template.repsMin}-${template.repsMax}</span>
+              <span class="badge">${getEffortBadge(template)}</span>
+              <span class="badge">Rest ${formatTime(template.rest)}</span>
+              <span class="badge">${completeSets}/${exercise.sets.length} complete</span>
+            </div>
+            ${template.note ? `<div class="exercise-note">${template.note}</div>` : ''}
+            ${template.intensityHint ? `<div class="exercise-note">${template.intensityHint}</div>` : ''}
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <label class="label">Exercise / substitution</label>
+          <select data-action="substitute" data-exercise-index="${exerciseIndex}">
+            ${subs.map(name => `<option value="${escapeHtml(name)}" ${name === exercise.actualName ? 'selected' : ''}>${name}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="history-chip">
+          <strong>${last ? 'Last session:' : 'History:'}</strong>
+          ${last ? `${last.entry.session.date} • ${summarizeSetPattern(last.entry.exercise.sets)} • Week ${last.entry.session.week}` : 'No prior session for this movement yet.'}
+          <br><span class="muted">${suggestion.label}${suggestion.value ? ` Suggested load: <strong>${suggestion.value}</strong>` : ''}</span>
+        </div>
+
+        <div class="exercise-tools">
+          <button class="mini-btn" data-action="repeat" data-exercise-index="${exerciseIndex}">Repeat last</button>
+          <button class="mini-btn" data-action="suggest" data-exercise-index="${exerciseIndex}">Use suggested</button>
+          <button class="mini-btn" data-action="timer" data-rest="${template.rest}" data-label="${escapeHtml(exercise.actualName)} rest">Start rest</button>
+        </div>
+
+        <div class="set-table">
+          ${exercise.sets.map((set, setIndex) => `
+            <div class="set-row ${(Number(set.weight) > 0 && Number(set.reps) > 0) ? 'set-complete' : ''}">
+              <div class="set-index">${setIndex + 1}</div>
+              <div>
+                <label class="field-label">Weight</label>
+                <input type="number" step="0.5" min="0" value="${set.weight}" placeholder="lb" data-action="set-field" data-exercise-index="${exerciseIndex}" data-set-index="${setIndex}" data-field="weight" />
+              </div>
+              <div>
+                <label class="field-label">Reps</label>
+                <input type="number" step="1" min="0" value="${set.reps}" placeholder="${template.repsMin}-${template.repsMax}" data-action="set-field" data-exercise-index="${exerciseIndex}" data-set-index="${setIndex}" data-field="reps" />
+              </div>
+              <div>
+                <label class="field-label">${getEffortFieldLabel(template)}</label>
+                <input type="number" step="0.5" min="0" max="10" value="${set.rir}" placeholder="${getEffortPlaceholder(template)}" data-action="set-field" data-exercise-index="${exerciseIndex}" data-set-index="${setIndex}" data-field="rir" />
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </article>
+    `;
+  });
+
+  html += `
+      <label class="label" for="sessionNotes">Session notes</label>
+      <textarea id="sessionNotes" placeholder="How did today feel? Any cues, pain, wins, or changes?">${escapeHtml(draft.notes || '')}</textarea>
+      <div class="footer-actions">
+        <button class="ghost" id="exportQuickBtn">Export backup</button>
+        <button class="cta" id="saveSessionBtn">Save workout</button>
+      </div>
+    </section>
+  `;
+
+  return html;
+}
+
+function renderHistoryTab() {
+  const options = getHistoryOptions();
+  const filter = window.__historyFilter || '';
+  const rows = getHistoryItems(filter);
+  const stats = getStats();
+  return `
+    <section class="section glass">
+      <div class="section-title">
+        <h2>Progress snapshot</h2>
+        <div class="hint">Simple but useful</div>
+      </div>
+      <div class="stats">
+        <div class="stat"><strong>${stats.totalSessions}</strong><span>saved sessions</span></div>
+        <div class="stat"><strong>${stats.totalVolume.toLocaleString()}</strong><span>total volume</span></div>
+        <div class="stat"><strong>${stats.totalSets}</strong><span>working sets</span></div>
+        <div class="stat"><strong>${options.length}</strong><span>movements tracked</span></div>
+      </div>
+    </section>
+
+    <section class="section glass">
+      <div class="section-title">
+        <h2>Exercise history</h2>
+        <div class="hint">Filter or scan recent work</div>
+      </div>
+      <label class="label">Filter by exercise</label>
+      <select id="historyFilter">
+        <option value="">All exercises</option>
+        ${options.map(name => `<option value="${escapeHtml(name)}" ${name === filter ? 'selected' : ''}>${name}</option>`).join('')}
+      </select>
+      <div class="list" style="margin-top:12px;">
+        ${rows.length ? rows.map(row => `
+          <div class="item">
+            <div class="item-row">
+              <strong>${row.name}</strong>
+              <span class="vol">${row.volume.toLocaleString()} vol</span>
+            </div>
+            <div class="small muted">${row.date} • Week ${row.week} • ${row.programName} • ${row.workout}</div>
+            ${row.name !== row.originalName ? `<div class="small muted">Subbed from ${row.originalName}</div>` : ''}
+            <div style="margin-top:8px;">${row.summary}</div>
+          </div>
+        `).join('') : `<div class="item">No saved history yet. Save your first workout and this page becomes useful fast.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderReferenceTab() {
+  const program = currentProgram();
+  return `
+    <section class="section glass">
+      <div class="section-title">
+        <h2>Active program</h2>
+        <div class="hint">Switch any time</div>
+      </div>
+      <div class="metrics-grid">
+        ${renderProgramSelector()}
+        <div class="item" style="padding:12px;">
+          <div class="small muted">Current week</div>
+          <strong>Week ${state.currentWeek}</strong>
+          <div class="small muted" style="margin-top:4px;">${hasDeload(program) ? `Deload on week ${program.deloadWeek}.` : 'No deload configured.'}</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section glass">
+      <div class="section-title">
+        <h2>Program rules</h2>
+        <div class="hint">What this build is optimizing for</div>
+      </div>
+      <div class="list">
+        ${program.checklist.map(line => `<div class="item">${line}</div>`).join('')}
+      </div>
+    </section>
+
+    <section class="section glass">
+      <div class="section-title">
+        <h2>Weekly schedule</h2>
+        <div class="hint">Auto-select uses this</div>
+      </div>
+      <div class="list">
+        ${Object.values(program.workouts)
+          .sort((a, b) => (a.dayNumber || 0) - (b.dayNumber || 0))
+          .map(workout => `
+            <div class="item">
+              <div class="item-row"><strong>${workout.day}</strong><strong>${workout.name}</strong></div>
+              <div class="small muted">${workout.focus}</div>
+            </div>
+          `).join('')}
+        <div class="item">
+          <div class="item-row"><strong>Recovery</strong><strong>Rest / optional make-up</strong></div>
+          <div class="small muted">${program.recoveryNote || 'Use non-training days for recovery or a make-up session.'}</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section glass">
+      <div class="section-title">
+        <h2>What changed in V4</h2>
+        <div class="hint">Built on your beta</div>
+      </div>
+      <div class="list">
+        <div class="item">Added real multi-program support so your original upper/lower plan and the new glute-focused split can both live in one app.</div>
+        <div class="item">Upgraded the intensity display so exercises can show RIR, RPE ranges, or special failure-set instructions without hacking the UI.</div>
+        <div class="item">Updated session history to keep program context, which matters once you start rotating between templates.</div>
+      </div>
+    </section>
+  `;
+}
+
+function renderSettingsTab() {
+  return `
+    <section class="section glass">
+      <div class="section-title">
+        <h2>Data & backups</h2>
+        <div class="hint">Local-first</div>
+      </div>
+      <div class="list">
+        <div class="item">This V4 stores everything in your browser using local storage. That makes it fast and simple, but it also means backups matter.</div>
+      </div>
+      <div class="footer-actions">
+        <button class="ghost" id="exportBtn">Export JSON backup</button>
+        <label class="ghost" style="display:flex; align-items:center; justify-content:center; cursor:pointer;">Import backup<input type="file" id="importInput" accept="application/json" class="hidden" /></label>
+      </div>
+      <div style="margin-top:10px;"><button class="ghost danger" id="resetBtn">Reset all data</button></div>
+    </section>
+
+    <section class="section glass">
+      <div class="section-title">
+        <h2>Recommended next version</h2>
+        <div class="hint">Best build path from here</div>
+      </div>
+      <div class="list">
+        <div class="item">Add a custom program builder so you can create new splits without editing code.</div>
+        <div class="item">Add exercise-specific PR tiles and simple trend charts for load, reps, and bodyweight.</div>
+        <div class="item">Add cloud sync only after the program rules feel stable enough to freeze the data model.</div>
+        <div class="item">Add set-specific notes or checkboxes for “failure set completed” on the special-finish exercises.</div>
+      </div>
+    </section>
+  `;
+}
+
+function render() {
+  ensureWorkoutSelection();
+  const program = currentProgram();
+  document.getElementById('todayLabel').textContent = prettyDate(todayISO());
+  document.getElementById('weekValue').textContent = state.currentWeek;
+  document.getElementById('heroBadge').textContent = hasDeload(program) && state.currentWeek === program.deloadWeek
+    ? `Week ${state.currentWeek} • Deload`
+    : `${program.shortName} • Week ${state.currentWeek}`;
+
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === state.activeTab));
+
+  const content = document.getElementById('content');
+  if (state.activeTab === 'today') content.innerHTML = renderTodayTab();
+  if (state.activeTab === 'history') content.innerHTML = renderHistoryTab();
+  if (state.activeTab === 'reference') content.innerHTML = renderReferenceTab();
+  if (state.activeTab === 'settings') content.innerHTML = renderSettingsTab();
+
+  bindDynamicEvents();
+  updateTimerUI();
+}
+
+function bindDynamicEvents() {
+  const content = document.getElementById('content');
+
+  const programSelector = document.getElementById('programSelector');
+  if (programSelector) {
+    programSelector.addEventListener('change', (e) => {
+      state.selectedProgramKey = e.target.value;
+      state.selectedWorkoutKey = getCurrentAutoWorkoutKey(currentProgram());
+      saveState();
+      render();
+      showToast('Program changed');
+    });
+  }
+
+  content.querySelectorAll('[data-workout]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.selectedWorkoutKey = btn.dataset.workout;
+      saveState();
+      render();
+    });
+  });
+
+  content.querySelectorAll('[data-action="substitute"]').forEach(select => {
+    select.addEventListener('change', (e) => {
+      updateActualName(Number(e.target.dataset.exerciseIndex), e.target.value);
+      showToast('Exercise updated');
+    });
+  });
+
+  content.querySelectorAll('[data-action="set-field"]').forEach(input => {
+    input.addEventListener('input', (e) => {
+      updateDraftField(Number(e.target.dataset.exerciseIndex), Number(e.target.dataset.setIndex), e.target.dataset.field, e.target.value);
+      const row = e.target.closest('.set-row');
+      const parent = row?.querySelectorAll('input') || [];
+      const weight = Number(parent[0]?.value || 0);
+      const reps = Number(parent[1]?.value || 0);
+      row?.classList.toggle('set-complete', weight > 0 && reps > 0);
+    });
+    input.addEventListener('change', () => render());
+  });
+
+  content.querySelectorAll('[data-action="repeat"]').forEach(btn => {
+    btn.addEventListener('click', () => applyWeightStrategy(Number(btn.dataset.exerciseIndex), 'repeat'));
+  });
+
+  content.querySelectorAll('[data-action="suggest"]').forEach(btn => {
+    btn.addEventListener('click', () => applyWeightStrategy(Number(btn.dataset.exerciseIndex), 'suggest'));
+  });
+
+  content.querySelectorAll('[data-action="timer"]').forEach(btn => {
+    btn.addEventListener('click', () => startTimer(Number(btn.dataset.rest), btn.dataset.label));
+  });
+
+  const notes = document.getElementById('sessionNotes');
+  if (notes) notes.addEventListener('input', (e) => updateNotes(e.target.value));
+
+  const save = document.getElementById('saveSessionBtn');
+  if (save) save.addEventListener('click', saveSession);
+
+  const quickExport = document.getElementById('exportQuickBtn');
+  if (quickExport) quickExport.addEventListener('click', exportData);
+
+  ['sleep', 'energy', 'soreness', 'bodyweight'].forEach(field => {
+    const el = document.getElementById(`metric_${field}`);
+    if (el) el.addEventListener('input', (e) => setMetricField(field, e.target.value));
+  });
+
+  const historyFilter = document.getElementById('historyFilter');
+  if (historyFilter) historyFilter.addEventListener('change', (e) => {
+    window.__historyFilter = e.target.value;
+    render();
+  });
+
+  const exportBtn = document.getElementById('exportBtn');
+  if (exportBtn) exportBtn.addEventListener('click', exportData);
+  const importInput = document.getElementById('importInput');
+  if (importInput) importInput.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (file) importData(file);
+  });
+  const resetBtn = document.getElementById('resetBtn');
+  if (resetBtn) resetBtn.addEventListener('click', resetAllData);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => {
+  state.activeTab = tab.dataset.tab;
+  saveState();
+  render();
+}));
+
+document.getElementById('weekDown').addEventListener('click', () => {
+  state.currentWeek = clampWeek(state.currentWeek - 1);
+  saveState();
+  render();
+});
+
+document.getElementById('weekUp').addEventListener('click', () => {
+  state.currentWeek = clampWeek(state.currentWeek + 1);
+  saveState();
+  render();
+});
+
+document.getElementById('jumpAutoBtn').addEventListener('click', () => {
+  state.selectedWorkoutKey = getCurrentAutoWorkoutKey(currentProgram());
+  saveState();
+  render();
+  showToast('Auto-selected today\'s workout');
+});
+
+document.getElementById('openTodayBtn').addEventListener('click', () => {
+  state.activeTab = 'today';
+  saveState();
+  render();
+});
+
+document.getElementById('timerPlus').addEventListener('click', () => {
+  if (!timer.duration) return;
+  timer.duration += 30;
+  timer.remaining += 30;
+  updateTimerUI();
+});
+
+document.getElementById('timerPause').addEventListener('click', () => {
+  if (!timer.duration) return;
+  timer.running = !timer.running;
+  updateTimerUI();
+});
+
+document.getElementById('timerClose').addEventListener('click', closeTimer);
+
+render();
+
+  </script>
+</body>
+</html>
