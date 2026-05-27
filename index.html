@@ -77,6 +77,9 @@
     .wo-b:active{transform:scale(.97)}
     .wo-b strong{display:block;font-size:13px}
     .wo-b span{font-size:11px;color:var(--t3)}
+    .gym-choice{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 12px}
+    .gym-choice button{padding:12px;border-radius:var(--Rs);font-weight:800;font-size:13px;background:rgba(255,255,255,.03);border:1px solid var(--bdr);color:var(--t2);text-align:center}
+    .gym-choice button.on{background:var(--acB);border-color:rgba(99,220,255,.35);color:var(--t1)}
 
     /* Stats */
     .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
@@ -166,6 +169,9 @@
     .toast{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:50%;transform:translate(-50%,-10px);opacity:0;pointer-events:none;background:rgba(10,15,26,.96);color:var(--t1);border:1px solid var(--bdr);border-radius:999px;padding:10px 16px;font-size:13px;font-weight:700;z-index:60;backdrop-filter:blur(12px);transition:all .2s}
     .toast.show{opacity:1;transform:translate(-50%,0)}
 
+    .rest-alert{position:fixed;left:12px;right:12px;top:calc(58px + env(safe-area-inset-top,0px));z-index:70;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;border-radius:var(--R);background:rgba(17,24,39,.98);border:1px solid rgba(74,222,128,.28);box-shadow:0 8px 32px rgba(0,0,0,.45);color:var(--t1)}
+    .rest-alert strong{color:var(--gn);font-size:15px}.rest-alert span{color:var(--t2);font-size:12px}.rest-alert button{padding:8px 12px;border-radius:var(--Rx);background:rgba(255,255,255,.06);border:1px solid var(--bdr);font-size:12px;font-weight:800;color:var(--t2)}
+
     .spacer{height:calc(80px + env(safe-area-inset-bottom,0px))}
     .mb8{margin-bottom:8px} .mb12{margin-bottom:12px}
     .lbl{display:block;font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;font-weight:600}
@@ -183,6 +189,7 @@
   </div>
 </div>
 <div id="toast" class="toast"></div>
+<div id="restAlert" class="rest-alert hidden"></div>
 <div class="app">
   <div class="hdr">
     <div class="hdr-r"><div><div class="hdr-t" id="hT">Workout</div><div class="hdr-s" id="hS"></div></div><div class="hdr-bg" id="hB">W1</div></div>
@@ -190,6 +197,7 @@
       <div class="wk-s"><button id="wD">−</button><div class="wk-v" id="wV">W1</div><button id="wU">+</button></div>
       <button class="chip" id="aBtn">Auto</button>
       <button class="chip" id="tBtn">Today</button>
+      <button class="chip" id="gBtn" title="Toggle gym">Gym: YMCA</button>
       <div style="flex:1"></div>
       <button class="chip" id="pBtn" title="Switch profile">⇄</button>
     </div>
@@ -210,7 +218,7 @@
 </div>
 <script>
 // ═══ Service Worker (offline) ═══
-if('serviceWorker' in navigator){const c=`const C='wv5-1';self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.add(self.registration.scope)).then(()=>self.skipWaiting()))});self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request).then(r=>{const cl=r.clone();caches.open(C).then(c=>c.put(e.request,cl));return r}).catch(()=>caches.match(e.request)))})`;navigator.serviceWorker.register(URL.createObjectURL(new Blob([c],{type:'application/javascript'}))).catch(()=>{});}
+if('serviceWorker' in navigator){const c=`const C='wv9-1';self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.add(self.registration.scope)).then(()=>self.skipWaiting()))});self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request).then(r=>{const cl=r.clone();caches.open(C).then(c=>c.put(e.request,cl));return r}).catch(()=>caches.match(e.request)))})`;navigator.serviceWorker.register(URL.createObjectURL(new Blob([c],{type:'application/javascript'}))).catch(()=>{});}
 
 // ═══ PROGRAMS ═══
 const PROGRAMS={
@@ -218,34 +226,81 @@ upperLower12:{key:'upperLower12',title:'12-Week Upper / Lower Hypertrophy',short
 schedule:{1:'Upper A',2:'Lower A',4:'Upper B',5:'Lower B'},
 workouts:{
 upperA:{key:'upperA',dayNumber:1,day:'Monday',name:'Upper A',focus:'Horizontal push / pull',exercises:[
-{name:'Barbell Bench Press',sets:4,repsMin:5,repsMax:8,rirTarget:2,rest:180,note:'Main press. Add reps before load.',type:'compound',region:'upper',step:5},
-{name:'Chest-Supported Row',sets:4,repsMin:6,repsMax:8,rirTarget:2,rest:180,type:'compound',region:'upper',step:5},
-{name:'Incline DB Press',sets:3,repsMin:8,repsMax:10,rirTarget:3,rest:120,type:'compound',region:'upper',step:5},
-{name:'Lat Pulldown (V-bar)',sets:3,repsMin:8,repsMax:10,rirTarget:3,rest:120,type:'compound',region:'upper',step:5},
-{name:'Face Pulls',sets:2,repsMin:12,repsMax:15,rirTarget:3,rest:90,type:'accessory',region:'upper',step:2.5},
-{name:'Barbell Curl',sets:2,repsMin:8,repsMax:10,rirTarget:3,rest:90,type:'accessory',region:'upper',step:2.5}]},
-lowerA:{key:'lowerA',dayNumber:2,day:'Tuesday',name:'Lower A',focus:'Quad focus',exercises:[
-{name:'Horizontal Leg Press (Tippy)',sets:4,repsMin:6,repsMax:8,rirTarget:2,rest:180,type:'compound',region:'lower',step:10,note:'Heels slightly raised. Drive through midfoot.'},
-{name:'Hack Squat / Leg Press Variant',sets:3,repsMin:8,repsMax:10,rirTarget:3,rest:150,type:'compound',region:'lower',step:10},
-{name:'Leg Extension',sets:3,repsMin:10,repsMax:12,rirTarget:3,rest:90,type:'accessory',region:'lower',step:5},
-{name:'Lying Leg Curl',sets:3,repsMin:8,repsMax:10,rirTarget:3,rest:90,type:'accessory',region:'lower',step:5},
-{name:'Standing Calf Raise',sets:3,repsMin:10,repsMax:12,rirTarget:3,rest:90,type:'accessory',region:'lower',step:5}]},
+{name:'Barbell Bench Press',sets:4,repsMin:5,repsMax:7,rirTarget:2,rest:180,note:'Main press. Add reps before load; no planned failure.',type:'compound',region:'upper',step:5},
+{name:'Chest-Supported Row',sets:4,repsMin:6,repsMax:8,rirTarget:2,rest:180,note:'Stable main row. Keep reps controlled.',type:'compound',region:'upper',step:5},
+{name:'Incline DB Press',sets:3,repsMin:8,repsMax:12,rirTarget:2,rest:120,note:'Last set may be 1 RIR; avoid grinding to failure.',type:'compound',region:'upper',step:5},
+{name:'Lat Pulldown (V-bar)',sets:3,repsMin:8,repsMax:10,rirTarget:2,rest:120,note:'Controlled reps. Do not turn this into a swing.',type:'compound',region:'upper',step:5},
+{name:'Face Pulls / Cable Y Raise',sets:2,repsMin:12,repsMax:20,rirTarget:3,rest:90,note:'Shoulder health / rear delt work. Smooth reps.',type:'accessory',region:'upper',step:2.5},
+{name:'Barbell Curl',sets:2,repsMin:8,repsMax:12,rirTarget:2,rest:90,note:'Clean reps. No cheating as the default.',type:'accessory',region:'upper',step:2.5}]},
+lowerA:{key:'lowerA',dayNumber:2,day:'Tuesday',name:'Lower A',focus:'YMCA quad bias',exercises:[
+{name:'Horizontal Leg Press / 45° Leg Press',sets:3,repsMin:6,repsMax:10,rirTarget:2,rest:180,type:'compound',region:'lower',step:10,note:'Main quad movement. Stop before grinders; no 0-RIR leg press sets.'},
+{name:'Hack Squat / SSB Squat / Leg Press Variant',sets:2,repsMin:8,repsMax:10,rirTarget:3,rest:150,type:'compound',region:'lower',step:10,note:'Secondary quad movement. Keep 2–3 RIR and clean depth.'},
+{name:'Leg Extension',sets:2,repsMin:10,repsMax:15,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'Controlled. Optional hard final set only if knees feel good.'},
+{name:'Lying or Seated Leg Curl',sets:3,repsMin:8,repsMax:12,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'Hamstring balance. Full control through the eccentric.'},
+{name:'Standing Calf Raise',sets:3,repsMin:8,repsMax:15,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'Full ROM with a pause in the stretch.'}]},
+lowerAOffice:{key:'lowerAOffice',dayNumber:2.1,day:'Tuesday / Office',name:'Lower A — Office',focus:'Office gym quad focus',autoSchedule:false,exercises:[
+{name:'SSB Squat',sets:3,repsMin:6,repsMax:8,rirTarget:2,rest:180,type:'compound',region:'lower',step:10,note:'Office main quad/strength lift. Keep 2–3 RIR; no planned failure.'},
+{name:'Landmine Squat',sets:3,repsMin:10,repsMax:12,rirTarget:2,rest:150,type:'compound',region:'lower',step:10,note:'Lower spinal load than a straight-bar squat. Smooth reps.'},
+{name:'Spanish Squat / Cable Knee Extension',sets:2,repsMin:15,repsMax:20,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'Leg-extension replacement. Controlled burn, not sloppy failure.'},
+{name:'Cable Leg Curl',sets:3,repsMin:10,repsMax:15,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'Use cable, DB, band, or KBox setup if practical.'},
+{name:'Standing Calf Raise',sets:4,repsMin:10,repsMax:15,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'DB, SSB, or rack-supported. Full ROM.'}]},
 upperB:{key:'upperB',dayNumber:4,day:'Thursday',name:'Upper B',focus:'Vertical push / pull',exercises:[
-{name:'Seated Overhead Press',sets:4,repsMin:6,repsMax:8,rirTarget:2,rest:180,type:'compound',region:'upper',step:5},
-{name:'Weighted Pull-up / Lat Pulldown',sets:4,repsMin:6,repsMax:8,rirTarget:2,rest:180,type:'compound',region:'upper',step:5},
-{name:'Machine Chest Press',sets:3,repsMin:8,repsMax:10,rirTarget:3,rest:120,type:'compound',region:'upper',step:5},
-{name:'Seated Cable Row',sets:3,repsMin:8,repsMax:10,rirTarget:3,rest:120,type:'compound',region:'upper',step:5},
-{name:'Lateral Raise',sets:2,repsMin:12,repsMax:15,rirTarget:3,rest:90,type:'accessory',region:'upper',step:2.5},
-{name:'Triceps Pushdown',sets:2,repsMin:10,repsMax:12,rirTarget:3,rest:90,type:'accessory',region:'upper',step:2.5}]},
-lowerB:{key:'lowerB',dayNumber:5,day:'Friday',name:'Lower B',focus:'Posterior chain',exercises:[
-{name:'Romanian Deadlift',sets:3,repsMin:8,repsMax:10,rirTarget:2,rest:180,type:'compound',region:'lower',step:10},
-{name:'Bulgarian Split Squat',sets:3,repsMin:8,repsMax:10,rirTarget:3,rest:150,type:'compound',region:'lower',step:5,note:'Per leg.'},
-{name:'Leg Press (Flat Foot)',sets:3,repsMin:10,repsMax:12,rirTarget:3,rest:120,type:'compound',region:'lower',step:10},
-{name:'Seated Leg Curl',sets:3,repsMin:10,repsMax:12,rirTarget:3,rest:90,type:'accessory',region:'lower',step:5},
-{name:'Seated Calf Raise',sets:3,repsMin:12,repsMax:15,rirTarget:3,rest:90,type:'accessory',region:'lower',step:5}]}},
-substitutions:{'Barbell Bench Press':['DB Bench Press','Machine Chest Press','Floor Press','Close-Grip Bench Press','Weighted Dips'],'Chest-Supported Row':['T-Bar Row','Chest-Supported DB Row','Machine Row','Seal Row','Pendlay Row'],'Incline DB Press':['Incline Machine Press','Incline Smith Press','Landmine Press','Low Incline Barbell Press','Cable Incline Press'],'Lat Pulldown (V-bar)':['Neutral Grip Pull-up','Close-Grip Pulldown','Sternum Pulldown','Single-Arm DB Row','DB Pullover'],'Face Pulls':['Rear Delt Fly','Band Face Pull','Cable Y Raise','Reverse Pec Deck','Prone Y Raise'],'Barbell Curl':['EZ-Bar Curl','Cable Curl','Preacher Curl','Incline DB Curl','Spider Curl'],'Horizontal Leg Press (Tippy)':['45° Leg Press','Belt Squat','Hack Squat','Pendulum Squat','Smith Squat'],'Hack Squat / Leg Press Variant':['Front Squat','Safety Bar Squat','Goblet Squat','Pendulum Squat','V-Squat'],'Leg Extension':['Sissy Squat','Spanish Squat','Single-Leg Leg Press','Reverse Nordic Curl','Cyclist Squat'],'Lying Leg Curl':['Nordic Curl','Glute-Ham Raise','Good Morning','Sliding Leg Curl','Swiss Ball Leg Curl'],'Standing Calf Raise':['Leg Press Calf Raise','Donkey Calf Raise','Single-Leg Calf Raise','Smith Calf Raise','Seated Calf Raise'],'Seated Overhead Press':['Machine Shoulder Press','Standing OHP','Landmine Press','DB Shoulder Press','Arnold Press'],'Weighted Pull-up / Lat Pulldown':['Assisted Pull-up','Band-Assisted Chin-up','Inverted Row','Wide-Grip Pulldown','Single-Arm Pulldown'],'Machine Chest Press':['Cable Chest Press','Weighted Push-Up','Smith Press','Hammer Strength Press','Svend Press'],'Seated Cable Row':['Machine Row','Supported DB Row','Meadows Row','Chest-Supported DB Row','Barbell Bent-Over Row'],'Lateral Raise':['Cable Lateral Raise','Machine Lateral Raise','DB Partial Raise','Leaning Lateral Raise','Band Lateral Raise'],'Triceps Pushdown':['Skull Crusher','Overhead Triceps Extension','JM Press','Diamond Push-Up','Triceps Dip'],'Romanian Deadlift':['Trap Bar RDL','Stiff-Leg Deadlift','Good Morning','DB Romanian Deadlift','Cable Pull-Through'],'Bulgarian Split Squat':['Walking Lunge','Step-Up','Rear Foot Elevated Split Squat','Reverse Lunge','Goblet Split Squat'],'Leg Press (Flat Foot)':['45° Leg Press','Hack Squat','Goblet Squat','Belt Squat','Smith Squat'],'Seated Leg Curl':['Glute-Ham Raise','Nordic Curl','Good Morning','Sliding Leg Curl','Swiss Ball Curl'],'Seated Calf Raise':['Single-Leg Calf Raise','45° Calf Raise','Deficit Calf Raise','Leg Press Calf Raise','Donkey Calf Raise']},
-checklist:['Warm up with 2–3 progressive sets before the first heavy movement.','Stay around 2–3 RIR on most working sets.','Use 2–3 second eccentrics and controlled lockouts.','When all sets hit the top of the rep range cleanly, increase load next time.','If you stall for 2 sessions, hold or reduce the load slightly.','Deload on week 7 with roughly half the usual volume and keep technique sharp.','Protein, sleep, hydration, and consistency matter more than app complexity.'],
-recoveryNote:'Wednesday / Weekend: walk, mobility, low-stress cardio, or run a missed session manually.'},
+{name:'Seated Overhead Press',sets:3,repsMin:5,repsMax:8,rirTarget:2,rest:180,note:'Reduced to 3 sets. No heavy overhead failure.',type:'compound',region:'upper',step:5},
+{name:'Weighted Pull-up / Lat Pulldown',sets:4,repsMin:6,repsMax:10,rirTarget:2,rest:180,type:'compound',region:'upper',step:5,note:'Main vertical pull. Add reps before load.'},
+{name:'Machine Chest Press',sets:3,repsMin:8,repsMax:12,rirTarget:2,rest:120,type:'compound',region:'upper',step:5,note:'Stable pressing volume. Keep reps clean.'},
+{name:'Seated Cable Row',sets:3,repsMin:8,repsMax:12,rirTarget:2,rest:120,type:'compound',region:'upper',step:5,note:'Horizontal pull. Controlled stretch and squeeze.'},
+{name:'Lateral Raise',sets:3,repsMin:12,repsMax:20,rirTarget:2,rest:90,type:'accessory',region:'upper',step:2.5,note:'Extra delt volume moved here instead of more OHP.'},
+{name:'Triceps Pushdown / Overhead Extension',sets:2,repsMin:10,repsMax:15,rirTarget:2,rest:90,type:'accessory',region:'upper',step:2.5,note:'Joint-friendly setup. Occasional 1 RIR is fine; avoid ugly reps.'}]},
+lowerB:{key:'lowerB',dayNumber:5,day:'Friday',name:'Lower B',focus:'YMCA posterior chain + unilateral',exercises:[
+{name:'Romanian Deadlift',sets:3,repsMin:6,repsMax:8,rirTarget:2,rest:180,type:'compound',region:'lower',step:10,note:'No failure. Stop if back stiffness changes your position.'},
+{name:'Hand-Supported Split Squat',sets:2,repsMin:8,repsMax:10,rirTarget:3,rest:150,type:'compound',region:'lower',step:5,note:'Per side. Replaces Bulgarian split squat. Start weaker/stiffer side; do not chase load until back stays quiet.'},
+{name:'Goblet Squat or Light Leg Press',sets:2,repsMin:10,repsMax:12,rirTarget:3,rest:120,type:'compound',region:'lower',step:10,note:'Supplemental lower-body work. Keep 2–3 RIR.'},
+{name:'Seated Leg Curl',sets:3,repsMin:10,repsMax:15,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'Prefer seated when available. Controlled final reps.'},
+{name:'Seated Calf Raise',sets:3,repsMin:8,repsMax:15,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'Full ROM. Pause the stretch.'}]},
+lowerBOffice:{key:'lowerBOffice',dayNumber:5.1,day:'Friday / Office',name:'Lower B — Office',focus:'Office gym posterior chain',autoSchedule:false,exercises:[
+{name:'Barbell Romanian Deadlift',sets:3,repsMin:6,repsMax:8,rirTarget:2,rest:180,type:'compound',region:'lower',step:10,note:'Controlled posterior-chain work. No failure and no back-position loss.'},
+{name:'Hand-Supported Split Squat',sets:2,repsMin:8,repsMax:10,rirTarget:3,rest:150,type:'compound',region:'lower',step:5,note:'Per side. Start weaker/stiffer side. Hand support keeps the back quiet.'},
+{name:'Barbell Hip Thrust / Glute Bridge',sets:3,repsMin:8,repsMax:12,rirTarget:2,rest:150,type:'compound',region:'lower',step:10,note:'Glute volume without turning the session into a squat day.'},
+{name:'Cable Leg Curl',sets:3,repsMin:10,repsMax:15,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'Cable, DB, band, or KBox curl if setup is practical.'},
+{name:'Seated DB Calf Raise',sets:4,repsMin:12,repsMax:20,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'DB across knees or single-leg variation. Full ROM.'}]}},
+substitutions:{
+'Barbell Bench Press':['DB Bench Press','Machine Chest Press','Floor Press','Close-Grip Bench Press','Weighted Dips'],
+'Chest-Supported Row':['T-Bar Row','Chest-Supported DB Row','Machine Row','Seal Row','Pendlay Row'],
+'Incline DB Press':['Incline Machine Press','Incline Smith Press','Landmine Press','Low Incline Barbell Press','Cable Incline Press'],
+'Lat Pulldown (V-bar)':['Neutral Grip Pull-up','Close-Grip Pulldown','Sternum Pulldown','Single-Arm Pulldown','DB Pullover'],
+'Face Pulls / Cable Y Raise':['Face Pulls','Cable Y Raise','Rear Delt Fly','Band Face Pull','Reverse Pec Deck','Prone Y Raise'],
+'Barbell Curl':['EZ-Bar Curl','Cable Curl','Preacher Curl','Incline DB Curl','Spider Curl'],
+'Horizontal Leg Press / 45° Leg Press':['45° Leg Press','Horizontal Leg Press','SSB Squat','Landmine Squat','Belt Squat','Hack Squat'],
+'Hack Squat / SSB Squat / Leg Press Variant':['Hack Squat','SSB Squat','Front Squat','Landmine Squat','Heel-Elevated Goblet Squat','Pendulum Squat','V-Squat'],
+'Leg Extension':['Cable Knee Extension','Spanish Squat','Sissy Squat Support','Single-Leg Leg Press','Reverse Nordic Curl','Cyclist Squat'],
+'Lying or Seated Leg Curl':['Seated Leg Curl','Lying Leg Curl','Cable Leg Curl','DB Leg Curl','KBox Hamstring Curl','Swiss Ball Leg Curl'],
+'Standing Calf Raise':['SSB Calf Raise','DB Single-Leg Calf Raise','Leg Press Calf Raise','Donkey Calf Raise','KBox Calf Raise','Seated Calf Raise'],
+'SSB Squat':['SSB Box Squat','Front Squat','Goblet Squat','Landmine Squat','KBox Squat'],
+'Landmine Squat':['Heel-Elevated Goblet Squat','SSB Squat','Goblet Squat','KBox Squat','Front Squat'],
+'Spanish Squat / Cable Knee Extension':['Cable Knee Extension','Spanish Squat','Sissy Squat Support','Heel-Elevated Goblet Squat','Cyclist Squat'],
+'Cable Leg Curl':['DB Leg Curl','KBox Hamstring Curl','Sliding Leg Curl','Swiss Ball Curl','Nordic Curl'],
+'Seated Overhead Press':['Machine Shoulder Press','Standing OHP','Landmine Press','DB Shoulder Press','Arnold Press'],
+'Weighted Pull-up / Lat Pulldown':['Assisted Pull-up','Band-Assisted Chin-up','Inverted Row','Wide-Grip Pulldown','Single-Arm Pulldown'],
+'Machine Chest Press':['Cable Chest Press','Weighted Push-Up','Smith Press','Hammer Strength Press','Svend Press'],
+'Seated Cable Row':['Machine Row','Supported DB Row','Meadows Row','Chest-Supported DB Row','Barbell Bent-Over Row'],
+'Lateral Raise':['Cable Lateral Raise','Machine Lateral Raise','DB Partial Raise','Leaning Lateral Raise','Band Lateral Raise'],
+'Triceps Pushdown / Overhead Extension':['Triceps Pushdown','Overhead Triceps Extension','Skull Crusher','JM Press','Diamond Push-Up','Triceps Dip'],
+'Romanian Deadlift':['Trap Bar RDL','Stiff-Leg Deadlift','Good Morning','DB Romanian Deadlift','Cable Pull-Through','KBox RDL'],
+'Hand-Supported Split Squat':['Bulgarian Split Squat','Step-Up','Reverse Lunge','Goblet Split Squat','KBox Split Squat','Walking Lunge'],
+'Goblet Squat or Light Leg Press':['Light Leg Press','Goblet Squat','Landmine Squat','Belt Squat','Smith Squat','KBox Squat'],
+'Seated Leg Curl':['Cable Leg Curl','Lying Leg Curl','Nordic Curl','Sliding Leg Curl','Swiss Ball Curl','KBox Hamstring Curl'],
+'Seated Calf Raise':['Seated DB Calf Raise','Single-Leg Calf Raise','45° Calf Raise','Deficit Calf Raise','Leg Press Calf Raise','KBox Calf Raise'],
+'Barbell Romanian Deadlift':['DB Romanian Deadlift','KBox RDL','Trap Bar RDL','Cable Pull-Through','Good Morning'],
+'Barbell Hip Thrust / Glute Bridge':['Barbell Glute Bridge','Smith Hip Thrust','Cable Pull-Through','KBox Hip Thrust','Single-Leg Hip Thrust'],
+'Seated DB Calf Raise':['Single-Leg Calf Raise','KBox Calf Raise','Standing Calf Raise','Deficit Calf Raise','SSB Calf Raise']},
+checklist:['Use double progression: add reps first, then load when all sets hit the top of the range at target RIR.','Compound lifts stay mostly around 2 RIR; occasional 1 RIR is fine, but 0-RIR compound failure is not the goal.','Isolation lifts can occasionally reach 0–1 RIR on the final safe set only; do not stack repeated failure across the whole session.','If a compound hits 0 RIR before the final set, reduce load 5–10% next time.','If back stiffness appears, stop that movement, choose a supported variation, and log the note.','Use the Gym toggle: YMCA keeps machine-based lower days; Office automatically swaps Lower A and Lower B to the office versions.','Deload on week 7: reduce sets about 40–50%, keep movement patterns, use 4–5 RIR, no failure, and no new exercises.','Add 2 × 20–30 minutes Zone 2 cardio weekly after upper days or on non-lifting days if recovery stays good.'],
+referenceSections:[
+{title:'Gym toggle rule',items:['Use the YMCA / Office toggle before selecting or auto-selecting the day.','YMCA mode keeps the normal machine-based lower days; Office mode automatically swaps Lower A to Lower A — Office and Lower B to Lower B — Office.','Upper days stay unchanged because the office gym has enough upper-body equipment.','Do not make up missed machine volume later; choose the office equivalent and move on.']},
+{title:'KBox / flywheel guidance',items:['KBox is an office option, not a low-fatigue machine replacement.','Keep KBox lower-body work moderate at first: 2–3 sets of 8–12 on squats/RDLs, 2 sets of 8 per side on split squats, or 2–3 sets of 12–20 on calves.','Avoid maximal eccentric overload and avoid hard KBox lower-body work immediately before or after heavy lower sessions.']},
+{title:'Conditioning and athleticism',items:['Target 2 Zone 2 cardio sessions per week for 20–30 minutes.','Optional power primers: med ball chest pass 3×5, rotational throw 3×4/side, low box jump or pogo hop 3×3–5 if joints tolerate.','Keep conditioning supportive. It should not compromise hypertrophy recovery.']},
+{title:'Deload triggers',items:['Deload early if two of these happen: performance drops on the same lift twice, soreness persists into the next exposure, sleep/energy stay poor for several days, or joint/back stiffness changes execution.','During deload, use 4–5 RIR, no failure, and no new exercises.']},
+{title:'Safety notes',items:['Lower-body headache, dizziness, chest pain, neurological symptoms, unusual shortness of breath, or blood-pressure concerns mean stop training and seek appropriate medical guidance.','Back stiffness is a signal to stop the movement, use a supported substitution, and record what happened.']}],
+recoveryNote:'Wednesday / Weekend: walk, mobility, low-stress cardio, Zone 2, or run a missed session manually. Use the Gym toggle to swap lower days when training at the office.'},
 
 glutePullPush:{key:'glutePullPush',title:'12-Week Glute / Pull / Legs / Push',shortName:'Glute Split',profileHint:'daughter',deloadWeek:7,
 schedule:{1:'Day 1 – Glutes',2:'Day 2 – Back & Biceps',4:'Day 4 – Quads & Hamstrings',5:'Day 5 – Chest, Shoulders & Triceps'},
@@ -279,39 +334,66 @@ checklist:['Main lifts live in the lower rep ranges; chase cleaner reps before a
 recoveryNote:'Day 3 is rest or light cardio. Weekend can be full recovery or a make-up session.'}};
 
 // ═══ STATE ═══
-const SK='workout_v5_state',DF={version:5,profile:'',currentWeek:1,selectedProgramKey:'',selectedWorkoutKey:'',activeTab:'today',metricsByDate:{},drafts:{},logs:[]};
-let S=ldS(),tmr={dur:0,endAt:0,pauseRem:0,on:false,l:'',i:null},_rl=false;
+const OFFICE_WORKOUT_MAP={lowerA:'lowerAOffice',lowerB:'lowerBOffice'},OFFICE_BASE_MAP={lowerAOffice:'lowerA',lowerBOffice:'lowerB'};
+function nGM(v){return v==='office'?'office':'ymca'}
+function bWK(k){return OFFICE_BASE_MAP[k]||k}
+function eWK(pk,wk,gm){const b=bWK(wk);return pk==='upperLower12'&&nGM(gm)==='office'&&OFFICE_WORKOUT_MAP[b]?OFFICE_WORKOUT_MAP[b]:b}
+
+const EXERCISE_ALIASES={
+  'Horizontal Leg Press / 45° Leg Press':['Horizontal Leg Press (Tippy)','45° Leg Press','Leg Press'],
+  'Hack Squat / SSB Squat / Leg Press Variant':['Hack Squat / Leg Press Variant','Hack Squat','SSB Squat','Safety Bar Squat'],
+  'Lying or Seated Leg Curl':['Lying Leg Curl','Seated Leg Curl','Hamstring Curls','Leg Curl'],
+  'Triceps Pushdown / Overhead Extension':['Triceps Pushdown','Overhead Triceps Extension','Cable Triceps Pushdown'],
+  'Goblet Squat or Light Leg Press':['Leg Press (Flat Foot)','Goblet Squat','Light Leg Press'],
+  'Hand-Supported Split Squat':['Bulgarian Split Squat','Bulgarian Split Squats','Rear Foot Elevated Split Squat'],
+  'Barbell Romanian Deadlift':['Romanian Deadlift','Romanian Deadlifts','Barbell RDL','DB Romanian Deadlift'],
+  'Barbell Hip Thrust / Glute Bridge':['Hip Thrust','Hip Thrusts','Barbell Glute Bridge','Glute Bridge'],
+  'Spanish Squat / Cable Knee Extension':['Spanish Squat','Cable Knee Extension','Leg Extension','Leg Extensions'],
+  'Cable Leg Curl':['Lying Leg Curl','Seated Leg Curl','Hamstring Curls','Swiss Ball Leg Curl','DB Leg Curl'],
+  'Seated DB Calf Raise':['Seated Calf Raise','Seated Dumbbell Calf Raise'],
+  'SSB Squat':['Safety Bar Squat','Smith Squat','Horizontal Leg Press (Tippy)'],
+  'Landmine Squat':['Hack Squat / Leg Press Variant','Heel-Elevated Goblet Squat']
+};
+function xNames(n){const out=new Set([n]);const direct=EXERCISE_ALIASES[n]||[];direct.forEach(x=>out.add(x));Object.entries(EXERCISE_ALIASES).forEach(([k,v])=>{if(v.includes(n)){out.add(k);v.forEach(x=>out.add(x))}});return[...out].filter(Boolean)}
+const SK='workout_v9_state',DF={version:9,profile:'',currentWeek:1,selectedProgramKey:'',selectedWorkoutKey:'',gymMode:'ymca',activeWorkoutDate:'',activeTab:'today',timerPrefs:{sound:true,vibrate:true,notify:false},metricsByDate:{},drafts:{},logs:[]};
+let S=ldS(),tmr={dur:0,endAt:0,pauseRem:0,on:false,l:'',i:null},_rl=false,restAlert=null,saveError='';
 function dc(o){return JSON.parse(JSON.stringify(o))}
-function ldS(){try{const r=localStorage.getItem(SK)||localStorage.getItem('workout_v4_state')||localStorage.getItem('workout_v3_state');if(!r)return dc(DF);return mg({...dc(DF),...JSON.parse(r)})}catch(e){return dc(DF)}}
-function mg(s){s.version=5;if(!s.profile)s.profile='';if(!PROGRAMS[s.selectedProgramKey])s.selectedProgramKey=s.profile==='dad'?'upperLower12':'glutePullPush';s.drafts=s.drafts||{};s.logs=Array.isArray(s.logs)?s.logs:[];Object.values(s.drafts).forEach(d=>{if(!d.programKey)d.programKey=iPK(d.workoutKey)});s.logs=s.logs.map(l=>({...l,programKey:l.programKey||iPK(l.workoutKey)}));return s}
+function ldS(){try{const r=localStorage.getItem(SK)||localStorage.getItem('workout_v8_state')||localStorage.getItem('workout_v7_state')||localStorage.getItem('workout_v6_state')||localStorage.getItem('workout_v5_state')||localStorage.getItem('workout_v4_state')||localStorage.getItem('workout_v3_state');if(!r)return dc(DF);return mg({...dc(DF),...JSON.parse(r)})}catch(e){return dc(DF)}}
+function mg(s){const pickedOffice=bWK(s.selectedWorkoutKey)!==s.selectedWorkoutKey;if(!['ymca','office'].includes(s.gymMode))s.gymMode=pickedOffice?'office':'ymca';s.gymMode=nGM(s.gymMode);if(s.selectedProgramKey==='upperLower12')s.selectedWorkoutKey=bWK(s.selectedWorkoutKey);s.version=8;if(!s.profile)s.profile='';if(!PROGRAMS[s.selectedProgramKey])s.selectedProgramKey=s.profile==='dad'?'upperLower12':'glutePullPush';s.drafts=s.drafts||{};s.logs=Array.isArray(s.logs)?s.logs:[];Object.values(s.drafts).forEach(d=>{if(!d.programKey)d.programKey=iPK(d.workoutKey);if(!d.gymMode)d.gymMode=bWK(d.workoutKey)!==d.workoutKey?'office':'ymca'});s.logs=s.logs.map(l=>({...l,programKey:l.programKey||iPK(l.workoutKey),gymMode:l.gymMode||(bWK(l.workoutKey)!==l.workoutKey?'office':'ymca')}));return s}
 function iPK(w){if(!w)return'glutePullPush';const f=Object.values(PROGRAMS).find(p=>p.workouts[w]);return f?f.key:'glutePullPush'}
-function sv(){localStorage.setItem(SK,JSON.stringify(S))}
+function sv(){try{localStorage.setItem(SK,JSON.stringify(S));saveError='';return true}catch(e){saveError=e&&e.message?e.message:String(e);try{console.error('Save failed',e)}catch(_){ }return false}}
 
 // ═══ HELPERS ═══
 function P(){return PROGRAMS[S.selectedProgramKey]||PROGRAMS.glutePullPush}
+function gM(){return nGM(S.gymMode)}
+function gL(){return gM()==='office'?'Office':'YMCA'}
+function cWK(){return eWK(S.selectedProgramKey,S.selectedWorkoutKey,S.gymMode)}
 function td(){const n=new Date();return new Date(n.getTime()-n.getTimezoneOffset()*60000).toISOString().split('T')[0]}
 function pr(d){const x=d?new Date(d+'T12:00:00'):new Date();return x.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}
-function oK(p){return Object.values((p||P()).workouts).sort((a,b)=>(a.dayNumber||0)-(b.dayNumber||0)).map(w=>w.key)}
+function aDate(){return S.activeWorkoutDate||td()}
+function wL(p,manual=true){return Object.values((p||P()).workouts).filter(w=>manual||w.autoSchedule!==false).sort((a,b)=>(a.dayNumber||0)-(b.dayNumber||0))}
+function oK(p){return wL(p,false).map(w=>w.key)}
 function aWK(p){p=p||P();const ordered=oK(p);
-// Find which workouts have been saved this week for this program
+// Find which auto-scheduled workouts have been saved this week for this program.
 const weekLogs=S.logs.filter(l=>l.week===S.currentWeek&&l.programKey===p.key);
-const loggedKeys=new Set(weekLogs.map(l=>l.workoutKey));
-// Pick the first unlogged workout in order
+const loggedKeys=new Set(weekLogs.map(l=>bWK(l.workoutKey)));
+// Pick the first unlogged auto-scheduled workout in order. Manual office options are skipped.
 const next=ordered.find(k=>!loggedKeys.has(k));
 if(next) return next;
-// All done this week — fall back to day-of-week match, then first
-const d=new Date().getDay(),s=Object.values(p.workouts).map(w=>({k:w.key,d:w.dayNumber})).sort((a,b)=>a.d-b.d),e=s.find(x=>x.d===d);
+// All scheduled sessions are done — fall back to day-of-week match, then first.
+const d=new Date().getDay(),s=wL(p,false).map(w=>({k:w.key,d:w.dayNumber})).sort((a,b)=>a.d-b.d),e=s.find(x=>x.d===d);
 if(e) return e.k;const n=s.find(x=>x.d>d);return(n||s[0]||{}).k||ordered[0]}
 function cl(v){return Math.max(1,Math.min(12,v))}
-function eW(){const p=P();if(!S.selectedWorkoutKey||!p.workouts[S.selectedWorkoutKey])S.selectedWorkoutKey=aWK(p)}
+function eW(){const p=P();if(p.key==='upperLower12')S.selectedWorkoutKey=bWK(S.selectedWorkoutKey);if(!S.selectedWorkoutKey||!p.workouts[S.selectedWorkoutKey])S.selectedWorkoutKey=aWK(p);if(!p.workouts[eWK(p.key,S.selectedWorkoutKey,S.gymMode)])S.selectedWorkoutKey=aWK(p)}
 function hD(p){return Number((p||P()).deloadWeek)>0}
 function tS(x,p){p=p||P();return(!hD(p)||S.currentWeek!==p.deloadWeek)?x.sets:Math.max(1,Math.ceil(x.sets/2))}
-function dK(d,w,pk,wk){return`${d||td()}__w${w||S.currentWeek}__${pk||S.selectedProgramKey}__${wk||S.selectedWorkoutKey}`}
-function mD(pk,wk){const p=PROGRAMS[pk],w=p.workouts[wk];return{key:dK(td(),S.currentWeek,pk,wk),date:td(),week:S.currentWeek,programKey:pk,workoutKey:wk,notes:'',savedAt:null,exercises:w.exercises.map(x=>({originalName:x.name,actualName:x.name,sets:Array.from({length:tS(x,p)},()=>({weight:'',reps:'',rir:''}))}))}}
-function D(){const k=dK();if(S.drafts[k])return S.drafts[k];const d=mD(S.selectedProgramKey,S.selectedWorkoutKey);S.drafts[k]=d;sv();return d}
+function dK(d,w,pk,wk){const ep=pk||S.selectedProgramKey,ew=wk||cWK();return`${d||aDate()}__w${w||S.currentWeek}__${ep}__${ew}`}
+function mD(pk,wk){const p=PROGRAMS[pk],w=p.workouts[wk],ad=aDate();return{key:dK(ad,S.currentWeek,pk,wk),date:ad,week:S.currentWeek,programKey:pk,workoutKey:wk,gymMode:nGM(S.gymMode),notes:'',savedAt:null,exercises:w.exercises.map(x=>({originalName:x.name,actualName:x.name,sets:Array.from({length:tS(x,p)},()=>({weight:'',reps:'',rir:''}))}))}}
+function syD(d,pk,wk){const p=PROGRAMS[pk],w=p?.workouts?.[wk];if(!p||!w)return d;const fresh=mD(pk,wk),old=Array.isArray(d.exercises)?d.exercises:[],by=new Map();old.forEach(e=>{xNames(e.originalName).forEach(n=>{if(n&&!by.has(n))by.set(n,e)});xNames(e.actualName).forEach(n=>{if(n&&!by.has(n))by.set(n,e)})});fresh.key=d.key||fresh.key;fresh.date=d.date||fresh.date;fresh.week=d.week||fresh.week;fresh.notes=d.notes||'';fresh.savedAt=d.savedAt||null;fresh.gymMode=d.gymMode||fresh.gymMode;fresh.exercises=fresh.exercises.map(ne=>{const oe=xNames(ne.originalName).map(n=>by.get(n)).find(Boolean);if(!oe)return ne;const os=Array.isArray(oe.sets)?oe.sets:[];return{...ne,actualName:ne.originalName,sets:ne.sets.map((ns,i)=>({...ns,...(os[i]||{})}))}});return fresh}
+function D(){const wk=cWK(),k=dK(aDate(),S.currentWeek,S.selectedProgramKey,wk);if(S.drafts[k]){S.drafts[k]=syD(S.drafts[k],S.selectedProgramKey,wk);return S.drafts[k]}const d=mD(S.selectedProgramKey,wk);S.drafts[k]=d;sv();return d}
 function pg(d){let n=0,t=0;d.exercises.forEach(x=>x.sets.forEach(s=>{t++;if(Number(s.weight)>0&&Number(s.reps)>0)n++}));return{n,t}}
 function vl(x){return x.sets.reduce((s,t)=>s+((Number(t.weight)||0)*(Number(t.reps)||0)),0)}
-function hF(nm){const m=[];S.logs.forEach(s=>s.exercises.forEach((x,i)=>{if(x.actualName===nm||x.originalName===nm)m.push({s,x,i})}));return m.sort((a,b)=>a.s.date<b.s.date?1:-1)}
+function hF(nm){const ns=new Set(xNames(nm));const m=[];S.logs.forEach(s=>s.exercises.forEach((x,i)=>{if(ns.has(x.actualName)||ns.has(x.originalName))m.push({s,x,i})}));return m.sort((a,b)=>a.s.date<b.s.date?1:-1)}
 function sP(sets){const c=sets.filter(s=>Number(s.weight)>0||Number(s.reps)>0);if(!c.length)return'No data';const w=c.map(s=>Number(s.weight)||0).filter(Boolean),r=c.map(s=>Number(s.reps)||0).filter(Boolean);return`${w.length?w.join('/'):'-'} × ${r.length?r.join('/'):'-'}`}
 function cW(sets){const v=sets.map(s=>Number(s.weight)).filter(x=>x>0);if(!v.length)return 0;const c={};v.forEach(x=>c[x]=(c[x]||0)+1);return Number(Object.entries(c).sort((a,b)=>b[1]-a[1]||Number(b[0])-Number(a[0]))[0][0])}
 function rL(v){return Number.isInteger(v)?v:Math.round(v*2)/2}
@@ -323,9 +405,28 @@ function eL(t){return t.intensityType==='rpe'?'RPE':t.intensityType==='special'?
 function eP(t){return t.intensityType==='rpe'?`${t.intensityMin}–${t.intensityMax}`:t.intensityType==='special'?(t.intensityHint?'note':'-'):String(t.rirTarget)}
 function sB(sets,t){const v=sets.filter(s=>Number(s.weight)>0&&Number(s.reps)>0);if(!v.length||!v.every(s=>Number(s.reps)>=t.repsMax))return false;if(t.intensityType==='rpe'){const e=v.map(eV).filter(x=>x>0);return!e.length||(e.reduce((a,b)=>a+b,0)/e.length)<=t.intensityMax}if(t.intensityType==='special')return true;const e=v.map(eV).filter(x=>x>=0),avg=e.length?e.reduce((a,b)=>a+b,0)/e.length:t.rirTarget;return avg<=(t.rirTarget+0.5)}
 function sg(cx,t){const l=lP(cx.actualName,cx.originalName);if(!l)return{v:'',l:'No prior data'};const p=l.e.x,b=cW(p.sets);if(!b)return{v:'',l:'No load last time'};const s=p.sets.filter(s=>Number(s.weight)>0&&Number(s.reps)>0),bump=sB(s,t),val=bump?rL(b+(t.step||5)):b;let lb=bump?`Met target → +${t.step||5}`:'Repeat load, beat reps';if(t.intensityType==='special'&&t.intensityHint)lb+=` · ${t.intensityHint}`;return{v:val,l:lb}}
-function gS(){let se=S.logs.length,v=0,st=0,ps={},pc=0;S.logs.forEach(s=>s.exercises.forEach(x=>{v+=vl(x);x.sets.forEach(s=>{if(Number(s.weight)>0&&Number(s.reps)>0)st++;const k=x.actualName,sc=Number(s.weight)||0;if(sc>(ps[k]||0)){if(ps[k]!==undefined)pc++;ps[k]=sc}})}));return{se,v:Math.round(v),st,pc,tw:S.logs.filter(l=>l.week===S.currentWeek&&l.programKey===S.selectedProgramKey).length}}
+function gS(){let se=S.logs.length,v=0,st=0,ps={},pc=0;S.logs.forEach(s=>s.exercises.forEach(x=>{v+=vl(x);x.sets.forEach(s=>{if(Number(s.weight)>0&&Number(s.reps)>0)st++;const k=x.actualName,sc=Number(s.weight)||0;if(sc>(ps[k]||0)){if(ps[k]!==undefined)pc++;ps[k]=sc}})}));return{se,v:Math.round(v),st,pc,tw:new Set(S.logs.filter(l=>l.week===S.currentWeek&&l.programKey===S.selectedProgramKey).map(l=>bWK(l.workoutKey))).size}}
 function esc(v){return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function ft(s){return`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
+function pBW(date){const ds=Object.entries(S.metricsByDate||{}).filter(([d,m])=>d<date&&Number(m.bodyweight)>0).sort((a,b)=>a[0]<b[0]?1:-1);return ds.length?Number(ds[0][1].bodyweight):0}
+function vW(d){const out=[],met=S.metricsByDate[d.date]||{},bw=Number(met.bodyweight)||0,pb=pBW(d.date);if(bw&&pb&&Math.abs(bw-pb)/pb>.08)out.push(`Bodyweight differs from last entry by ${Math.round(((bw-pb)/pb)*100)}%. Check the entry.`);d.exercises.forEach((x,ei)=>{const t=tp(d.programKey,d.workoutKey,ei);x.sets.forEach((s,si)=>{const w=Number(s.weight)||0,r=Number(s.reps)||0,ri=s.rir===''?null:Number(s.rir);if(w>0&&!r)out.push(`${x.actualName} set ${si+1}: weight entered but reps are blank.`);if(r>0&&!w)out.push(`${x.actualName} set ${si+1}: reps entered but weight is blank.`);if(ri!==null&&ri>6)out.push(`${x.actualName} set ${si+1}: RIR/RPE entry looks unusually high.`);if(t?.type==='compound'&&ri!==null&&ri<=0)out.push(`${x.actualName} set ${si+1}: compound failure logged. Consider backing off next time.`)})});return out.slice(0,5)}
+
+function hasEntry(d){return!!(d&&Array.isArray(d.exercises)&&d.exercises.some(x=>Array.isArray(x.sets)&&x.sets.some(s=>Number(s.weight)>0||Number(s.reps)>0||String(s.rir||'').trim()!=='')))}
+function logFor(d){return S.logs.find(l=>l.key===d.key)}
+function normSets(sets){return(sets||[]).map(s=>({weight:String(s.weight??''),reps:String(s.reps??''),rir:String(s.rir??'')}))}
+function cmpCore(d,fromLog){return JSON.stringify({date:d.date,week:d.week,programKey:d.programKey,workoutKey:d.workoutKey,gymMode:nGM(d.gymMode),notes:d.notes||'',metrics:fromLog?(d.metrics||{}):(S.metricsByDate[d.date]||{}),exercises:(d.exercises||[]).map(x=>({originalName:x.originalName,actualName:x.actualName,sets:normSets(x.sets)}))})}
+function draftChanged(d){const l=logFor(d);return!l||cmpCore(d,false)!==cmpCore(l,true)}
+function saveInfo(d){const pg2=pg(d),l=logFor(d),changed=draftChanged(d);return{completed:pg2.n,total:pg2.t,partial:pg2.n<pg2.t,saved:!!l,changed,lastSaved:l?.savedAt||'',hasData:hasEntry(d)}}
+function fmtDateTime(iso){if(!iso)return'';try{return new Date(iso).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}catch(e){return iso}}
+function saveStatusHTML(d){const st=saveInfo(d),wk=`Training Week ${d.week}`,done=`Completed: ${pr(d.date)}`;if(st.saved&&!st.changed)return`<div class="bn bn-i"><strong>Saved to History</strong><br>${done} · ${wk}<br><span style="color:var(--t2)">${st.completed}/${st.total} sets saved${st.lastSaved?` · Saved ${fmtDateTime(st.lastSaved)}`:''}</span></div>`;if(st.saved&&st.changed)return`<div class="bn bn-w"><strong>Unsaved changes since last save</strong><br>${done} · ${wk}<br><span style="color:var(--t2)">Press Update Saved Workout to refresh History.</span></div>`;return`<div class="bn bn-w"><strong>Draft autosaved only</strong><br>${done} · ${wk}<br><span style="color:var(--t2)">Press Save Workout to History when you want this workout to appear in History.</span></div>`}
+function saveButtonLabel(d){const st=saveInfo(d);if(st.saved&&st.changed)return'Update Saved Workout';if(st.saved&&!st.changed)return'Saved ✓';return'Save Workout to History'}
+function saveDraftToLog(d,quiet){const saved=dc(d);saved.savedAt=new Date().toISOString();saved.programKey=saved.programKey||S.selectedProgramKey;saved.gymMode=nGM(saved.gymMode||S.gymMode);saved.key=saved.key||dK(saved.date,saved.week,saved.programKey,saved.workoutKey);const rec={...saved,metrics:S.metricsByDate[saved.date]||{}};const i=S.logs.findIndex(l=>l.key===rec.key);if(i>=0)S.logs[i]=rec;else S.logs.unshift(rec);S.drafts[rec.key]={...dc(saved),savedAt:saved.savedAt};const ok=sv();if(!ok){toast('Save failed — export backup now');return false}if(!quiet){if(navigator.vibrate&&S.timerPrefs?.vibrate)navigator.vibrate([20,40,20]);toast('Saved to History ✓')}return true}
+function unsavedDrafts(){return Object.values(S.drafts||{}).filter(d=>hasEntry(d)&&draftChanged(d)).sort((a,b)=>(b.date||'').localeCompare(a.date||''))}
+function uDate(v){if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){toast('Invalid date');return}const old=D(),oldKey=old.key;S.activeWorkoutDate=v;if(old.date!==v){const moved=dc(old);delete S.drafts[oldKey];moved.date=v;moved.key=dK(v,moved.week,moved.programKey,moved.workoutKey);if(!S.drafts[moved.key])S.drafts[moved.key]=moved}sv();render();toast('Workout date set')}
+function openDraft(k){const d=S.drafts[k];if(!d)return;S.activeWorkoutDate=d.date||td();S.currentWeek=cl(Number(d.week)||S.currentWeek);S.selectedProgramKey=d.programKey||S.selectedProgramKey;S.gymMode=nGM(d.gymMode||(bWK(d.workoutKey)!==d.workoutKey?'office':'ymca'));S.selectedWorkoutKey=bWK(d.workoutKey);S.activeTab='today';sv();render();toast('Draft opened')}
+function deleteDraft(k){if(!S.drafts[k])return;if(!confirm('Delete this draft? Saved history will not be deleted.'))return;delete S.drafts[k];sv();render();toast('Draft deleted')}
+function notifStatus(){if(!('Notification'in window))return'Not supported';return Notification.permission==='granted'?'Enabled':Notification.permission==='denied'?'Blocked':'Not enabled'}
+
 
 // ═══ SPARKLINE + TRENDS ═══
 function getTrend(name,limit){
@@ -365,17 +466,26 @@ function trendHTML(name){
 
 // ═══ PROFILE ═══
 function chk(){document.getElementById('gate').classList.toggle('hidden',!!S.profile)}
-document.querySelectorAll('[data-pf]').forEach(b=>b.addEventListener('click',()=>{S.profile=b.dataset.pf;S.selectedProgramKey=b.dataset.pf==='dad'?'upperLower12':'glutePullPush';S.selectedWorkoutKey=aWK(P());sv();document.getElementById('gate').classList.add('hidden');render();toast("Let's go!")}));
+document.querySelectorAll('[data-pf]').forEach(b=>b.addEventListener('click',()=>{S.profile=b.dataset.pf;S.selectedProgramKey=b.dataset.pf==='dad'?'upperLower12':'glutePullPush';if(S.selectedProgramKey!=='upperLower12')S.gymMode='ymca';S.selectedWorkoutKey=aWK(P());sv();document.getElementById('gate').classList.add('hidden');render();toast("Let's go!")}));
 document.getElementById('pBtn').addEventListener('click',()=>{S.profile='';sv();chk()});
 
 // ═══ TIMER ═══
-function stT(d,l){clearInterval(tmr.i);tmr={dur:d,endAt:Date.now()+d*1000,pauseRem:0,on:true,l:l||'Rest',i:null};uT();tmr.i=setInterval(()=>{if(!tmr.on)return;const rem=Math.ceil((tmr.endAt-Date.now())/1000);if(rem<=0){tmr.on=false;tmr.endAt=Date.now();clearInterval(tmr.i);if(navigator.vibrate)navigator.vibrate([120,50,120]);toast(`${tmr.l} done`)}uT()},250)}
+function pref(k){return!!(S.timerPrefs&&S.timerPrefs[k])}
+function primeAudio(){try{const A=window.AudioContext||window.webkitAudioContext;if(!A)return;if(!window.__wa)window.__wa=new A();if(window.__wa.state==='suspended')window.__wa.resume()}catch(e){}}
+function beep(){if(!pref('sound'))return;try{const A=window.AudioContext||window.webkitAudioContext;if(!A)return;const ctx=window.__wa||new A();window.__wa=ctx;if(ctx.state==='suspended')ctx.resume();const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=880;g.gain.setValueAtTime(0.0001,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.18,ctx.currentTime+0.03);g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.45);o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+0.5)}catch(e){}}
+function showRestAlert(label){restAlert={label:label||'Rest',at:new Date().toISOString()};const e=document.getElementById('restAlert');if(!e)return;e.innerHTML=`<div><strong>Rest complete</strong><br><span>${esc(restAlert.label)} · ${fmtDateTime(restAlert.at)}</span></div><button id="raX">Dismiss</button>`;e.classList.remove('hidden');const x=document.getElementById('raX');if(x)x.addEventListener('click',()=>{e.classList.add('hidden');restAlert=null})}
+function fireNotification(label){try{if(!pref('notify')||!('Notification'in window)||Notification.permission!=='granted')return;new Notification('Rest complete',{body:`${label||'Rest'} timer is done.`,tag:'workout-rest-timer',renotify:true})}catch(e){}}
+function timerFinished(){tmr.on=false;tmr.endAt=Date.now();clearInterval(tmr.i);if(pref('vibrate')&&navigator.vibrate)navigator.vibrate([160,70,160,70,240]);beep();fireNotification(tmr.l);showRestAlert(tmr.l);toast(`${tmr.l} done`);uT()}
+function tickT(){if(!tmr.on)return;const rem=Math.ceil((tmr.endAt-Date.now())/1000);if(rem<=0){timerFinished();return}uT()}
+function stT(d,l){primeAudio();clearInterval(tmr.i);tmr={dur:d,endAt:Date.now()+d*1000,pauseRem:0,on:true,l:l||'Rest',i:null};uT();tmr.i=setInterval(tickT,250)}
 function uT(){const b=document.getElementById('tmr');if(!tmr.dur){b.classList.remove('show');return}b.classList.add('show');const rem=tmr.on?Math.max(0,Math.ceil((tmr.endAt-Date.now())/1000)):tmr.pauseRem;document.getElementById('tT').textContent=ft(rem);document.getElementById('tL').textContent=tmr.l;document.getElementById('tF').style.width=`${Math.max(0,((tmr.dur-rem)/tmr.dur)*100)}%`;document.getElementById('tP').textContent=tmr.on?'Pause':'Play'}
 function clT(){clearInterval(tmr.i);tmr={dur:0,endAt:0,pauseRem:0,on:false,l:'',i:null};uT()}
 document.getElementById('t+').addEventListener('click',()=>{if(!tmr.dur)return;tmr.dur+=30;if(tmr.on){tmr.endAt+=30000}else{tmr.pauseRem+=30}uT()});
-document.getElementById('tP').addEventListener('click',()=>{if(!tmr.dur)return;if(tmr.on){tmr.pauseRem=Math.max(0,Math.ceil((tmr.endAt-Date.now())/1000));tmr.on=false;clearInterval(tmr.i)}else{tmr.endAt=Date.now()+tmr.pauseRem*1000;tmr.on=true;tmr.i=setInterval(()=>{if(!tmr.on)return;const rem=Math.ceil((tmr.endAt-Date.now())/1000);if(rem<=0){tmr.on=false;tmr.endAt=Date.now();clearInterval(tmr.i);if(navigator.vibrate)navigator.vibrate([120,50,120]);toast(`${tmr.l} done`)}uT()},250)}uT()});
+document.getElementById('tP').addEventListener('click',()=>{if(!tmr.dur)return;if(tmr.on){tmr.pauseRem=Math.max(0,Math.ceil((tmr.endAt-Date.now())/1000));tmr.on=false;clearInterval(tmr.i)}else{primeAudio();tmr.endAt=Date.now()+tmr.pauseRem*1000;tmr.on=true;tmr.i=setInterval(tickT,250)}uT()});
 document.getElementById('tX').addEventListener('click',clT);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&tmr.dur&&tmr.on)uT()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&tmr.dur&&tmr.on)tickT()});
+async function enableNotifications(){try{if(!('Notification'in window)){toast('Notifications not supported');return}const p=await Notification.requestPermission();S.timerPrefs.notify=p==='granted';sv();render();toast(p==='granted'?'Notifications enabled':'Notifications not enabled')}catch(e){toast('Notifications unavailable')}}
+function testTimerAlert(){primeAudio();beep();if(pref('vibrate')&&navigator.vibrate)navigator.vibrate([80,40,80]);fireNotification('Test');showRestAlert('Test alert');toast('Test alert sent')}
 
 // ═══ TOAST ═══
 function toast(m){const e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(toast._);toast._=setTimeout(()=>e.classList.remove('show'),2000)}
@@ -385,57 +495,65 @@ function uF(ei,si,f,v){D().exercises[ei].sets[si][f]=v;sv()}
 function uN(ei,v){D().exercises[ei].actualName=v;sv();render()}
 function uNt(v){D().notes=v;sv()}
 function aW(ei,ty){const d=D(),x=d.exercises[ei],t=tp(d.programKey,d.workoutKey,ei),l=lP(x.actualName,x.originalName);if(!l){toast('No previous data');return}const ls=l.e.x.sets,s=sg(x,t);x.sets.forEach((st,i)=>{if(ty==='repeat'){const p=ls[i]||ls[ls.length-1]||{};st.weight=p.weight||st.weight}else{if(s.v)st.weight=s.v}});sv();render();toast(ty==='repeat'?'Repeated':'Suggested')}
-function svS(){const d=dc(D());d.savedAt=new Date().toISOString();d.programKey=S.selectedProgramKey;const m=S.metricsByDate[d.date]||{},s={...d,metrics:m};const i=S.logs.findIndex(l=>l.key===s.key);if(i>=0)S.logs[i]=s;else S.logs.unshift(s);sv();if(navigator.vibrate)navigator.vibrate([20,40,20]);toast('Saved ✓');render()}
-function expD(){const p={exportedAt:new Date().toISOString(),app:'Workout V5',data:S},b=new Blob([JSON.stringify(p,null,2)],{type:'application/json'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=`workout-backup-${td()}.json`;a.click();URL.revokeObjectURL(u);toast('Exported')}
+function svS(){const d=dc(D()),st=saveInfo(d);if(st.partial&&!confirm(`Only ${st.completed} of ${st.total} sets have entries. Save this workout to History anyway?`))return;if(saveDraftToLog(d,false))render()}
+function expD(){const p={exportedAt:new Date().toISOString(),app:'Workout V9',data:S},b=new Blob([JSON.stringify(p,null,2)],{type:'application/json'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=`workout-backup-${td()}.json`;a.click();URL.revokeObjectURL(u);toast('Exported')}
 function impD(f){const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result),i=p.data||p;if(!i.logs&&!i.drafts)throw 0;S=mg({...dc(DF),...i});eW();sv();render();toast('Imported')}catch(e){toast('Import failed')}};r.readAsText(f)}
 function rstA(){if(!confirm('Clear ALL data?'))return;S=dc(DF);eW();sv();render();toast('Cleared')}
-function sM(f,v){const d=td();if(!S.metricsByDate[d])S.metricsByDate[d]={sleep:'',energy:'',soreness:'',bodyweight:''};S.metricsByDate[d][f]=v;sv()}
+function sM(f,v){const d=aDate();if(!S.metricsByDate[d])S.metricsByDate[d]={sleep:'',energy:'',soreness:'',bodyweight:''};S.metricsByDate[d][f]=v;sv()}
 
 // ═══ RENDER ═══
 function render(){if(_rl)return;_rl=true;requestAnimationFrame(()=>{_rl=false;doR()})}
-function doR(){eW();const p=P(),w=p.workouts[S.selectedWorkoutKey],dl=hD(p)&&S.currentWeek===p.deloadWeek;
+function doR(){eW();const p=P(),w=p.workouts[cWK()],dl=hD(p)&&S.currentWeek===p.deloadWeek;
 document.getElementById('hT').textContent=w?w.name:p.shortName;
-document.getElementById('hS').textContent=pr(td());
-document.getElementById('hB').textContent=dl?`W${S.currentWeek} · Deload`:`${p.shortName} · W${S.currentWeek}`;
-document.getElementById('wV').textContent=`W${S.currentWeek}`;
+document.getElementById('hS').textContent=pr(aDate());
+document.getElementById('hB').textContent=dl?`W${S.currentWeek} · ${gL()} · Deload`:`${p.shortName} · ${gL()} · W${S.currentWeek}`;
+document.getElementById('wV').textContent=`W${S.currentWeek}`;const gb=document.getElementById('gBtn');if(gb){gb.textContent=`Gym: ${gL()}`;gb.classList.toggle('hidden',p.key!=='upperLower12')}
 document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tab===S.activeTab));
 const c=document.getElementById('C');
 if(S.activeTab==='today')c.innerHTML=rT();else if(S.activeTab==='history')c.innerHTML=rH();else if(S.activeTab==='reference')c.innerHTML=rR();else c.innerHTML=rSt();
 bind();uT()}
 
-function rT(){const p=P(),w=p.workouts[S.selectedWorkoutKey],d=D(),pr2=pg(d),dl=hD(p)&&S.currentWeek===p.deloadWeek,met=S.metricsByDate[td()]||{sleep:'',energy:'',soreness:'',bodyweight:''},s=gS();
-// Figure out which workouts are already logged this week
-const weekDone=new Set(S.logs.filter(l=>l.week===S.currentWeek&&l.programKey===S.selectedProgramKey).map(l=>l.workoutKey));
-const totalWO=Object.keys(p.workouts).length;
-const doneCount=weekDone.size;
-let h=`<div class="card"><div class="card-h"><h2>${p.title}</h2><span class="hint">${pr2.n}/${pr2.t} sets</span></div><span class="lbl">Program</span><select class="sel mb12" id="pS">${Object.values(PROGRAMS).map(x=>`<option value="${x.key}" ${x.key===S.selectedProgramKey?'selected':''}>${esc(x.title)}</option>`).join('')}</select>${dl?'<div class="bn bn-w mb8">Deload week — volume auto-halved.</div>':''}<div class="wo-g">${Object.values(p.workouts).sort((a,b)=>(a.dayNumber||0)-(b.dayNumber||0)).map((wo,i)=>{const done=weekDone.has(wo.key);return`<button class="wo-b ${wo.key===S.selectedWorkoutKey?'on':''}" data-wo="${wo.key}"><strong>${wo.name}</strong><span>${done?'✓ Done':'Workout '+(i+1)+' of '+totalWO}</span></button>`}).join('')}</div></div>`;
+function rT(){const p=P(),w=p.workouts[cWK()],d=D(),pr2=pg(d),dl=hD(p)&&S.currentWeek===p.deloadWeek,met=S.metricsByDate[d.date]||{sleep:'',energy:'',soreness:'',bodyweight:''},s=gS();
+const weekDone=new Set(S.logs.filter(l=>l.week===S.currentWeek&&l.programKey===S.selectedProgramKey).map(l=>bWK(l.workoutKey)));
+const scheduled=wL(p,false),totalWO=scheduled.length,showGym=p.key==='upperLower12';
+let h=`<div class="card"><div class="card-h"><h2>${p.title}</h2><span class="hint">${pr2.n}/${pr2.t} sets</span></div><span class="lbl">Program</span><select class="sel mb12" id="pS">${Object.values(PROGRAMS).map(x=>`<option value="${x.key}" ${x.key===S.selectedProgramKey?'selected':''}>${esc(x.title)}</option>`).join('')}</select>${showGym?`<span class="lbl">Gym</span><div class="gym-choice"><button class="${gM()==='ymca'?'on':''}" data-gym="ymca">YMCA</button><button class="${gM()==='office'?'on':''}" data-gym="office">Office Gym</button></div>`:''}<span class="lbl">Completed date</span><input class="sel mb12" type="date" id="wDate" value="${esc(d.date)}">${dl?'<div class="bn bn-w mb8">Deload week — volume auto-halved. Use 4–5 RIR, no failure, and no new exercises.</div>':''}<div class="wo-g">${scheduled.map((wo)=>{const actual=p.workouts[eWK(p.key,wo.key,S.gymMode)]||wo,done=weekDone.has(wo.key),idx=scheduled.findIndex(x=>x.key===wo.key),swapped=actual.key!==wo.key,tag=done?'✓ Done':swapped?`Office · Workout ${idx+1} of ${totalWO}`:'Workout '+(idx+1)+' of '+totalWO;return`<button class="wo-b ${wo.key===bWK(S.selectedWorkoutKey)?'on':''}" data-wo="${wo.key}"><strong>${actual.name}</strong><span>${tag}</span></button>`}).join('')}</div></div>`;
 h+=`<div class="card"><div class="card-h"><h2>Readiness</h2><span class="hint">Check-in</span></div><div class="met"><div class="mf"><label>Sleep</label><input type="number" step="0.5" min="0" max="14" id="mS" value="${met.sleep||''}" placeholder="hrs" inputmode="decimal"></div><div class="mf"><label>Weight</label><input type="number" step="0.1" min="0" id="mB" value="${met.bodyweight||''}" placeholder="lbs" inputmode="decimal"></div><div class="mf"><label>Energy</label><input type="number" min="1" max="5" id="mE" value="${met.energy||''}" placeholder="1-5" inputmode="numeric"></div><div class="mf"><label>Sore</label><input type="number" min="1" max="5" id="mO" value="${met.soreness||''}" placeholder="1-5" inputmode="numeric"></div></div></div>`;
 h+=`<div class="card"><div class="stats"><div class="st"><strong>${s.tw}</strong><span>This wk</span></div><div class="st"><strong>${s.se}</strong><span>Total</span></div><div class="st"><strong>${s.st}</strong><span>Sets</span></div><div class="st"><strong>${s.pc}</strong><span>PRs</span></div></div></div>`;
+h+=saveStatusHTML(d);
+const warns=vW(d);if(warns.length)h+=`<div class="bn bn-w"><strong>Check entries:</strong><br>${warns.map(esc).join('<br>')}</div>`;
 d.exercises.forEach((x,ei)=>{const t=tp(d.programKey,d.workoutKey,ei),l=lP(x.actualName,x.originalName),s2=sg(x,t),subs=[x.originalName,...(p.substitutions[x.originalName]||[])],dn=x.sets.filter(s=>Number(s.weight)>0&&Number(s.reps)>0).length,ad=dn===x.sets.length;
 h+=`<div class="ex"><div class="ex-top"><div class="ex-nm">${x.actualName}</div><div class="ex-bd"><span class="bd">${tS(t)} × ${t.repsMin}–${t.repsMax}</span><span class="bd">${eB(t)}</span><span class="bd">Rest ${ft(t.rest)}</span><span class="bd ${ad?'bd-ok':''}">${dn}/${x.sets.length}</span></div>${t.note?`<div class="ex-nt">${t.note}</div>`:''}${t.intensityHint?`<div class="ex-nt">${t.intensityHint}</div>`:''}</div><select class="ex-sb" data-sb="${ei}">${subs.map(n=>`<option value="${esc(n)}" ${n===x.actualName?'selected':''}>${n}</option>`).join('')}</select><div class="ex-hi"><strong>${l?'Last:':'History:'}</strong> ${l?`${l.e.s.date} · ${sP(l.e.x.sets)} · W${l.e.s.week}`:'No prior session.'}<br><span style="color:var(--t3)">${s2.l}${s2.v?` → <strong style="color:var(--ac)">${s2.v}</strong>`:''}</span>${trendHTML(x.actualName)}</div><div class="ex-tl"><button class="tb" data-rp="${ei}">↻ Repeat</button><button class="tb" data-sg="${ei}">↑ Suggest</button><button class="tb tb-t" data-rt="${t.rest}" data-rl="${esc(x.actualName)}">⏱ ${ft(t.rest)}</button></div><div class="sets">${x.sets.map((s,si)=>{const dn2=Number(s.weight)>0&&Number(s.reps)>0;return`<div class="sr${dn2?' dn':''}"><div class="sn">${si+1}</div><div class="sf"><label>Weight</label><input type="number" inputmode="decimal" step="0.5" min="0" value="${s.weight}" placeholder="lb" data-f="${ei}-${si}-weight"></div><div class="sf"><label>Reps</label><input type="number" inputmode="numeric" step="1" min="0" value="${s.reps}" placeholder="${t.repsMin}–${t.repsMax}" data-f="${ei}-${si}-reps"></div><div class="sf"><label>${eL(t)}</label><input type="number" inputmode="decimal" step="0.5" min="0" max="10" value="${s.rir}" placeholder="${eP(t)}" data-f="${ei}-${si}-rir"></div></div>`}).join('')}</div></div>`});
-h+=`<div class="card"><span class="lbl">Session notes</span><textarea class="notes" id="sN" placeholder="How did it feel?">${esc(d.notes||'')}</textarea><div class="acts"><button class="bg" id="qE">Export</button><button class="bp" id="svB">Save workout</button></div></div><div class="spacer"></div>`;return h}
+h+=`<div class="card"><span class="lbl">Session notes</span><textarea class="notes" id="sN" placeholder="How did it feel?">${esc(d.notes||'')}</textarea><div class="acts"><button class="bg" id="qE">Export</button><button class="bp" id="svB">${saveButtonLabel(d)}</button></div></div><div class="spacer"></div>`;return h}
 
-function rH(){const opts=[...new Set(S.logs.flatMap(s=>s.exercises.map(e=>e.actualName)))].sort(),fl=window.__hf||'',rows=[];S.logs.forEach(s=>s.exercises.forEach(x=>{if(fl&&x.actualName!==fl)return;const p=PROGRAMS[s.programKey]||P();rows.push({n:x.actualName,o:x.originalName,w:p.workouts[s.workoutKey]?.name||s.workoutKey,p:p.shortName,d:s.date,wk:s.week,s:sP(x.sets),v:Math.round(vl(x))})}));rows.sort((a,b)=>a.d<b.d?1:-1);const s=gS();
-let h=`<div class="card"><div class="stats"><div class="st"><strong>${s.se}</strong><span>Sessions</span></div><div class="st"><strong>${s.v.toLocaleString()}</strong><span>Volume</span></div><div class="st"><strong>${s.st}</strong><span>Sets</span></div><div class="st"><strong>${opts.length}</strong><span>Moves</span></div></div></div>`;
-h+=`<div class="card"><div class="card-h"><h2>Exercise history</h2></div><span class="lbl">Filter</span><select class="sel mb12" id="hF"><option value="">All</option>${opts.map(n=>`<option value="${esc(n)}" ${n===fl?'selected':''}>${n}</option>`).join('')}</select>${fl?(() => {const t=getTrend(fl,12);return t?`<div class="hi" style="background:rgba(99,220,255,.04);border-color:rgba(99,220,255,.12)"><div class="hi-tp"><span class="hi-n" style="color:var(--ac)">Trend</span><span class="hi-v">${t.points[t.points.length-1].weight} lb</span></div><div class="ex-spark" style="margin-top:4px">${sparkSVG(t.points,120,28)}<span class="${t.up?'spark-up':t.flat?'':'spark-dn'}">${t.up?'↑':t.flat?'→':'↓'} ${t.up?'+':''}${t.delta} lb (${t.up?'+':''}${t.pct}%) over ${t.points.length} sessions</span></div></div>`:''})():''}${rows.length?rows.map(r=>`<div class="hi"><div class="hi-tp"><span class="hi-n">${r.n}</span><span class="hi-v">${r.v.toLocaleString()}</span></div><div class="hi-m">${r.d} · W${r.wk} · ${r.p} · ${r.w}</div>${r.n!==r.o?`<div class="hi-m">Subbed from ${r.o}</div>`:''}<div class="hi-s">${r.s}</div></div>`).join(''):'<div class="hi">No history yet.</div>'}</div><div class="spacer"></div>`;return h}
+function rH(){const opts=[...new Set(S.logs.flatMap(s=>s.exercises.map(e=>e.actualName)))].sort(),fl=window.__hf||'',rows=[];S.logs.forEach(s=>s.exercises.forEach(x=>{if(fl&&x.actualName!==fl)return;const p=PROGRAMS[s.programKey]||P();rows.push({n:x.actualName,o:x.originalName,w:p.workouts[s.workoutKey]?.name||s.workoutKey,p:p.shortName,g:s.gymMode==='office'?'Office':'YMCA',d:s.date,wk:s.week,s:sP(x.sets),v:Math.round(vl(x))})}));rows.sort((a,b)=>a.d<b.d?1:-1);const st=gS(),uns=unsavedDrafts(),sessions=[...S.logs].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.savedAt||'').localeCompare(a.savedAt||''));
+let h=`<div class="card"><div class="stats"><div class="st"><strong>${st.se}</strong><span>Sessions</span></div><div class="st"><strong>${st.v.toLocaleString()}</strong><span>Volume</span></div><div class="st"><strong>${st.st}</strong><span>Sets</span></div><div class="st"><strong>${opts.length}</strong><span>Moves</span></div></div></div>`;
+if(uns.length)h+=`<div class="bn bn-w"><strong>${uns.length} unsaved draft${uns.length===1?'':'s'} found.</strong><br>Open Settings → Unsaved draft review to save or delete them.</div>`;
+h+=`<div class="card"><div class="card-h"><h2>Workout history</h2><span class="hint">By completed date</span></div>${sessions.length?sessions.map(s=>{const p=PROGRAMS[s.programKey]||P(),w=p.workouts[s.workoutKey]?.name||s.workoutKey,done=pg(s),vol=s.exercises.reduce((a,x)=>a+vl(x),0);return`<div class="hi"><div class="hi-tp"><span class="hi-n">${esc(w)}</span><span class="hi-v">${Math.round(vol).toLocaleString()}</span></div><div class="hi-m">Completed ${esc(pr(s.date))} · Training W${s.week} · ${s.gymMode==='office'?'Office':'YMCA'} · ${done.n}/${done.t} sets</div>${s.savedAt?`<div class="hi-m">Saved ${esc(fmtDateTime(s.savedAt))}</div>`:''}${s.notes?`<div class="hi-s">${esc(s.notes)}</div>`:''}</div>`}).join(''):'<div class="hi">No saved workouts yet. Drafts do not appear here until you press Save Workout to History.</div>'}</div>`;
+h+=`<div class="card"><div class="card-h"><h2>Exercise history</h2></div><span class="lbl">Filter</span><select class="sel mb12" id="hF"><option value="">All</option>${opts.map(n=>`<option value="${esc(n)}" ${n===fl?'selected':''}>${n}</option>`).join('')}</select>${fl?(() => {const t=getTrend(fl,12);return t?`<div class="hi" style="background:rgba(99,220,255,.04);border-color:rgba(99,220,255,.12)"><div class="hi-tp"><span class="hi-n" style="color:var(--ac)">Trend</span><span class="hi-v">${t.points[t.points.length-1].weight} lb</span></div><div class="ex-spark" style="margin-top:4px">${sparkSVG(t.points,120,28)}<span class="${t.up?'spark-up':t.flat?'':'spark-dn'}">${t.up?'↑':t.flat?'→':'↓'} ${t.up?'+':''}${t.delta} lb (${t.up?'+':''}${t.pct}%) over ${t.points.length} sessions</span></div></div>`:''})():''}${rows.length?rows.map(r=>`<div class="hi"><div class="hi-tp"><span class="hi-n">${esc(r.n)}</span><span class="hi-v">${r.v.toLocaleString()}</span></div><div class="hi-m">${esc(pr(r.d))} · Training W${r.wk} · ${esc(r.p)} · ${esc(r.g)} · ${esc(r.w)}</div>${r.n!==r.o?`<div class="hi-m">Subbed from ${esc(r.o)}</div>`:''}<div class="hi-s">${esc(r.s)}</div></div>`).join(''):'<div class="hi">No saved exercise history yet.</div>'}</div><div class="spacer"></div>`;return h}
 
-function rR(){const p=P();let h=`<div class="card"><div class="card-h"><h2>Active program</h2></div><span class="lbl">Program</span><select class="sel mb12" id="rS">${Object.values(PROGRAMS).map(x=>`<option value="${x.key}" ${x.key===S.selectedProgramKey?'selected':''}>${esc(x.title)}</option>`).join('')}</select><div class="ri"><strong>Week ${S.currentWeek}</strong> · ${hD(p)?`Deload W${p.deloadWeek}`:'No deload'}</div></div>`;
-h+=`<div class="card"><div class="card-h"><h2>Program rules</h2></div>${p.checklist.map(l=>`<div class="ri">${l}</div>`).join('')}</div>`;
-h+=`<div class="card"><div class="card-h"><h2>Schedule</h2></div>${Object.values(p.workouts).sort((a,b)=>(a.dayNumber||0)-(b.dayNumber||0)).map(w=>`<div class="ri"><strong>${w.day}</strong> — ${w.name}<br><span style="color:var(--t3);font-size:12px">${w.focus}</span></div>`).join('')}<div class="ri"><strong>Recovery</strong><br><span style="color:var(--t3);font-size:12px">${p.recoveryNote||'Rest.'}</span></div></div><div class="spacer"></div>`;return h}
+function rR(){const p=P(),scheduled=wL(p,false),showGym=p.key==='upperLower12';let h=`<div class="card"><div class="card-h"><h2>Active program</h2></div><span class="lbl">Program</span><select class="sel mb12" id="rS">${Object.values(PROGRAMS).map(x=>`<option value="${x.key}" ${x.key===S.selectedProgramKey?'selected':''}>${esc(x.title)}</option>`).join('')}</select>${showGym?`<span class="lbl">Gym</span><div class="gym-choice"><button class="${gM()==='ymca'?'on':''}" data-gym="ymca">YMCA</button><button class="${gM()==='office'?'on':''}" data-gym="office">Office Gym</button></div>`:''}<div class="ri"><strong>Week ${S.currentWeek}</strong> · ${hD(p)?`Deload W${p.deloadWeek}`:'No deload'}${showGym?` · ${gL()} mode`:''}</div></div>`;
+h+=`<div class="card"><div class="card-h"><h2>Program rules</h2></div>${p.checklist.map(l=>`<div class="ri">${esc(l)}</div>`).join('')}</div>`;
+h+=`<div class="card"><div class="card-h"><h2>Schedule</h2></div>${scheduled.map(w=>{const actual=p.workouts[eWK(p.key,w.key,S.gymMode)]||w,swapped=actual.key!==w.key;return`<div class="ri"><strong>${w.day}</strong> — ${actual.name}${swapped?' <span style="color:var(--ac);font-size:12px">Office swap</span>':''}<br><span style="color:var(--t3);font-size:12px">${actual.focus}</span></div>`}).join('')}<div class="ri"><strong>Recovery</strong><br><span style="color:var(--t3);font-size:12px">${p.recoveryNote||'Rest.'}</span></div></div>`;
+if(Array.isArray(p.referenceSections))p.referenceSections.forEach(sec=>{h+=`<div class="card"><div class="card-h"><h2>${esc(sec.title)}</h2></div>${sec.items.map(l=>`<div class="ri">${esc(l)}</div>`).join('')}</div>`});
+h+=`<div class="spacer"></div>`;return h}
 
-function rSt(){let h=`<div class="card"><div class="card-h"><h2>Data &amp; backups</h2><span class="hint">Local-first</span></div><div class="ri mb12">Everything lives in your browser's local storage. Back up regularly.</div><div class="acts mb12"><button class="bg" id="sE">Export</button><label class="bg" style="display:flex;align-items:center;justify-content:center;cursor:pointer">Import<input type="file" id="sI" accept="application/json" style="display:none"></label></div><button class="bg red" id="sR">Reset all data</button></div>`;
+function rSt(){const uds=unsavedDrafts(),prefs=S.timerPrefs||{};let h=`<div class="card"><div class="card-h"><h2>Data &amp; backups</h2><span class="hint">Local-first</span></div><div class="ri mb12">Everything lives in your browser's local storage. Back up regularly.</div>${saveError?`<div class="bn bn-w"><strong>Storage warning:</strong><br>${esc(saveError)}</div>`:''}<div class="acts mb12"><button class="bg" id="sE">Export</button><label class="bg" style="display:flex;align-items:center;justify-content:center;cursor:pointer">Import<input type="file" id="sI" accept="application/json" style="display:none"></label></div><button class="bg red" id="sR">Reset all data</button></div>`;
+h+=`<div class="card"><div class="card-h"><h2>Unsaved draft review</h2><span class="hint">${uds.length}</span></div><div class="ri mb12">Drafts are autosaved working copies. Save only real completed or partial workouts that should appear in History.</div>${uds.length?uds.slice(0,20).map(d=>{const info=saveInfo(d),p=PROGRAMS[d.programKey]||P(),w=p.workouts[d.workoutKey]?.name||d.workoutKey;return`<div class="hi"><div class="hi-tp"><span class="hi-n">${esc(w)}</span><span class="hi-v">${info.completed}/${info.total}</span></div><div class="hi-m">${esc(pr(d.date))} · Training W${d.week} · ${d.gymMode==='office'?'Office':'YMCA'}</div><div class="acts" style="grid-template-columns:1fr 1fr 1fr;margin-top:8px"><button class="bg" data-uopen="${esc(d.key)}">Open</button><button class="bp" data-usave="${esc(d.key)}">Save</button><button class="bg red" data-udel="${esc(d.key)}">Delete</button></div></div>`}).join(''):'<div class="ri">No unsaved workout drafts with entered data.</div>'}</div>`;
+h+=`<div class="card"><div class="card-h"><h2>Timer alerts</h2><span class="hint">${notifStatus()}</span></div><div class="ri mb12">Timer alerts are best-effort in a browser. Sound and vibration work when the app is active; notifications require permission and device/browser support.</div><div class="gym-choice"><button class="${prefs.sound?'on':''}" data-tpref="sound">Sound ${prefs.sound?'On':'Off'}</button><button class="${prefs.vibrate?'on':''}" data-tpref="vibrate">Vibrate ${prefs.vibrate?'On':'Off'}</button></div><div class="acts"><button class="bg" id="tPerm">Enable notifications</button><button class="bg" id="tTest">Test alert</button></div></div>`;
 h+=`<div class="card"><div class="card-h"><h2>Profile</h2></div><div class="ri mb12">Current: <strong>${S.profile==='dad'?'Upper / Lower':S.profile==='daughter'?'Glute Split':'Not set'}</strong></div><button class="bg" id="sP">Switch profile</button></div>`;
+if(P().key==='upperLower12')h+=`<div class="card"><div class="card-h"><h2>Gym mode</h2><span class="hint">${gL()}</span></div><div class="ri mb12">Office mode automatically swaps Lower A and Lower B to office-gym versions. Upper days stay unchanged.</div><div class="gym-choice"><button class="${gM()==='ymca'?'on':''}" data-gym="ymca">YMCA</button><button class="${gM()==='office'?'on':''}" data-gym="office">Office Gym</button></div></div>`;
 h+=`<div class="card"><div class="card-h"><h2>iPhone tips</h2></div><div class="ri">Tap Share → "Add to Home Screen" in Safari to install as a full-screen app.</div><div class="ri">iOS can purge local storage under pressure. Export after each session.</div></div><div class="spacer"></div>`;return h}
 
 // ═══ EVENTS ═══
 function bind(){const c=document.getElementById('C');
-const ps=c.querySelector('#pS')||c.querySelector('#rS');if(ps)ps.addEventListener('change',e=>{S.selectedProgramKey=e.target.value;S.selectedWorkoutKey=aWK(P());sv();render();toast('Changed')});
+const ps=c.querySelector('#pS')||c.querySelector('#rS');if(ps)ps.addEventListener('change',e=>{S.selectedProgramKey=e.target.value;if(S.selectedProgramKey!=='upperLower12')S.gymMode='ymca';S.selectedWorkoutKey=aWK(P());sv();render();toast('Changed')});
 c.querySelectorAll('[data-wo]').forEach(b=>b.addEventListener('click',()=>{S.selectedWorkoutKey=b.dataset.wo;sv();render()}));
 c.querySelectorAll('[data-sb]').forEach(s=>s.addEventListener('change',e=>{uN(Number(e.target.dataset.sb),e.target.value);toast('Swapped')}));
 c.querySelectorAll('[data-f]').forEach(inp=>{inp.addEventListener('input',e=>{const[ei,si,f]=e.target.dataset.f.split('-');uF(Number(ei),Number(si),f,e.target.value);const row=e.target.closest('.sr');if(row){const ins=row.querySelectorAll('input');const w=Number(ins[0]?.value||0),r=Number(ins[1]?.value||0);const wasDone=row.classList.contains('dn');row.classList.toggle('dn',w>0&&r>0);if(!wasDone&&w>0&&r>0&&!tmr.on){const exCard=row.closest('.ex');const tBtn=exCard?.querySelector('[data-rt]');if(tBtn){stT(Number(tBtn.dataset.rt),tBtn.dataset.rl||'Rest')}}}});inp.addEventListener('blur',()=>setTimeout(()=>{if(!document.activeElement||!document.activeElement.dataset.f)render()},200))});
 c.querySelectorAll('[data-rp]').forEach(b=>b.addEventListener('click',()=>aW(Number(b.dataset.rp),'repeat')));
 c.querySelectorAll('[data-sg]').forEach(b=>b.addEventListener('click',()=>aW(Number(b.dataset.sg),'suggest')));
 c.querySelectorAll('[data-rt]').forEach(b=>b.addEventListener('click',()=>stT(Number(b.dataset.rt),b.dataset.rl||'Rest')));
+const wd=c.querySelector('#wDate');if(wd)wd.addEventListener('change',e=>uDate(e.target.value));
 const mi=[['mS','sleep'],['mE','energy'],['mO','soreness'],['mB','bodyweight']];mi.forEach(([id,f])=>{const e=c.querySelector('#'+id);if(e)e.addEventListener('input',ev=>sM(f,ev.target.value))});
 const nt=c.querySelector('#sN');if(nt)nt.addEventListener('input',e=>uNt(e.target.value));
 const sb=c.querySelector('#svB');if(sb)sb.addEventListener('click',svS);
@@ -444,14 +562,22 @@ const hf=c.querySelector('#hF');if(hf)hf.addEventListener('change',e=>{window.__
 const se=c.querySelector('#sE');if(se)se.addEventListener('click',expD);
 const si=c.querySelector('#sI');if(si)si.addEventListener('change',e=>{const f=e.target.files?.[0];if(f)impD(f)});
 const sr=c.querySelector('#sR');if(sr)sr.addEventListener('click',rstA);
-const sp=c.querySelector('#sP');if(sp)sp.addEventListener('click',()=>{S.profile='';sv();chk()})}
+c.querySelectorAll('[data-tpref]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.tpref;S.timerPrefs={...dc(DF.timerPrefs),...(S.timerPrefs||{})};S.timerPrefs[k]=!S.timerPrefs[k];sv();render();toast(`${k} ${S.timerPrefs[k]?'on':'off'}`)}));
+const tp=c.querySelector('#tPerm');if(tp)tp.addEventListener('click',enableNotifications);
+const tt=c.querySelector('#tTest');if(tt)tt.addEventListener('click',testTimerAlert);
+c.querySelectorAll('[data-usave]').forEach(b=>b.addEventListener('click',()=>{const d=S.drafts[b.dataset.usave];if(d&&saveDraftToLog(d,false))render()}));
+c.querySelectorAll('[data-udel]').forEach(b=>b.addEventListener('click',()=>deleteDraft(b.dataset.udel)));
+c.querySelectorAll('[data-uopen]').forEach(b=>b.addEventListener('click',()=>openDraft(b.dataset.uopen)));
+const sp=c.querySelector('#sP');if(sp)sp.addEventListener('click',()=>{S.profile='';sv();chk()});
+c.querySelectorAll('[data-gym]').forEach(b=>b.addEventListener('click',()=>{S.gymMode=nGM(b.dataset.gym);S.selectedWorkoutKey=bWK(S.selectedWorkoutKey);sv();render();toast(`${gL()} mode`)}))}
 
 // ═══ NAV ═══
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{S.activeTab=t.dataset.tab;sv();render()}));
 document.getElementById('wD').addEventListener('click',()=>{S.currentWeek=cl(S.currentWeek-1);sv();render()});
 document.getElementById('wU').addEventListener('click',()=>{S.currentWeek=cl(S.currentWeek+1);sv();render()});
-document.getElementById('aBtn').addEventListener('click',()=>{S.selectedWorkoutKey=aWK(P());sv();render();toast('Auto-selected')});
-document.getElementById('tBtn').addEventListener('click',()=>{S.activeTab='today';sv();render()});
+document.getElementById('aBtn').addEventListener('click',()=>{S.selectedWorkoutKey=aWK(P());sv();render();toast(`Auto-selected · ${gL()}`)});
+document.getElementById('gBtn').addEventListener('click',()=>{S.gymMode=gM()==='office'?'ymca':'office';S.selectedWorkoutKey=bWK(S.selectedWorkoutKey);sv();render();toast(`${gL()} mode`)});
+document.getElementById('tBtn').addEventListener('click',()=>{S.activeWorkoutDate=td();S.activeTab='today';sv();render()});
 
 // ═══ INIT ═══
 chk();eW();render();
