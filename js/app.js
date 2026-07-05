@@ -8,8 +8,10 @@
  *     activeTab, timerPrefs,
  *     profiles: { dad: {currentWeek, selectedProgramKey, selectedWorkoutKey,
  *                       gymMode, activeDate, metricsByDate}, daughter: {…} },
- *     sessions: { [date__wN__program__workout]: session }
+ *     sessions: { [profile__date__wN__program__workout]: session }
  *   }
+ * Every session carries the profile it belongs to, so dad and daughter never
+ * collide even when they pick the same program/workout/date/week.
  * A session's progress status is always DERIVED from its entries — never
  * stored — so it cannot go stale or lie:
  *   In progress = any weight/reps/RIR entry exists.
@@ -97,8 +99,27 @@ function inferProgramKey(workoutKey) {
   return found ? found.key : 'glutePullPush';
 }
 
-function sessionKey(date, week, programKey, workoutKey) {
-  return `${date}__w${week}__${programKey}__${workoutKey}`;
+function sessionKey(profile, date, week, programKey, workoutKey) {
+  return `${profile}__${date}__w${week}__${programKey}__${workoutKey}`;
+}
+/* Same identity, without the profile — used only to match up legacy/
+ * not-yet-profiled sessions (see expandUnassignedSession) before they're
+ * assigned a real key. */
+function legacyBaseKey(session) {
+  return `${session.date}__w${session.week}__${session.programKey}__${session.workoutKey}`;
+}
+/* Sessions from before per-profile scoping (or an import that predates it)
+ * carry no profile and can't be attributed to one retroactively, so — same
+ * philosophy as the week/date/metrics migration below — they're duplicated
+ * into both profiles rather than guessed at or dropped. */
+function expandUnassignedSession(session) {
+  if (PROFILE_INFO[session.profile]) return [session];
+  return Object.keys(PROFILE_INFO).map(profile => {
+    const copy = deepClone(session);
+    copy.profile = profile;
+    copy.key = sessionKey(profile, session.date, session.week, session.programKey, session.workoutKey);
+    return copy;
+  });
 }
 function normalizeSet(raw) {
   return { weight: String(raw?.weight ?? ''), reps: String(raw?.reps ?? ''), rir: String(raw?.rir ?? '') };
@@ -110,11 +131,12 @@ function normalizeSession(raw) {
   const programKey = PROGRAMS[raw.programKey] ? raw.programKey : inferProgramKey(workoutKey);
   const date = isISODate(raw.date) ? raw.date : todayISO();
   const week = clampWeek(raw.week);
-  // Reject keys that would collide with Object internals ('__proto__' etc.).
-  const safeKey = typeof raw.key === 'string' && !['__proto__', 'constructor', 'prototype'].includes(raw.key) ? raw.key : '';
+  const profile = PROFILE_INFO[raw.profile] ? raw.profile : '';
+  // The key is always derived, never trusted from raw input — this also
+  // neutralizes '__proto__'/'constructor' etc. as imported keys by construction.
   return {
-    key: safeKey || sessionKey(date, week, programKey, workoutKey),
-    date, week, programKey, workoutKey,
+    key: sessionKey(profile, date, week, programKey, workoutKey),
+    profile, date, week, programKey, workoutKey,
     gymMode: normalizeGymMode(raw.gymMode || (baseWorkoutKey(workoutKey) !== workoutKey ? 'office' : 'ymca')),
     notes: typeof raw.notes === 'string' ? raw.notes : '',
     updatedAt: raw.updatedAt || raw.savedAt || '',
@@ -152,7 +174,8 @@ function normalizeV10(src) {
   }
   for (const rawSession of Object.values(src.sessions || {})) {
     const session = normalizeSession(rawSession);
-    if (session) state.sessions[session.key] = session;
+    if (!session) continue;
+    for (const copy of expandUnassignedSession(session)) state.sessions[copy.key] = copy;
   }
   return state;
 }
@@ -183,20 +206,27 @@ function migrateLegacy(src) {
   // same key, the DRAFT wins: in v1 the draft was always the live working
   // copy (saving wrote the snapshot back into drafts), so a diverging draft
   // holds edits made AFTER the last explicit save — dropping it would lose
-  // the newest data.
+  // the newest data. v1 had no profile concept, so log/draft matching is
+  // done on the profile-less key first; the result is duplicated to both
+  // profiles afterward (see expandUnassignedSession).
+  const legacySessions = {};
   for (const log of Array.isArray(src.logs) ? src.logs : []) {
     const session = normalizeSession(log);
     if (!session) continue;
     if (!session.updatedAt) session.updatedAt = `${session.date}T12:00:00.000Z`;
-    state.sessions[session.key] = session;
+    legacySessions[legacyBaseKey(session)] = session;
   }
   const drafts = src.drafts && typeof src.drafts === 'object' ? Object.values(src.drafts) : [];
   for (const draft of drafts) {
     const session = normalizeSession(draft);
     if (!session || !sessionHasContent(session)) continue;
-    const existing = state.sessions[session.key];
+    const baseKey = legacyBaseKey(session);
+    const existing = legacySessions[baseKey];
     if (existing && !session.updatedAt) session.updatedAt = existing.updatedAt;
-    state.sessions[session.key] = session;
+    legacySessions[baseKey] = session;
+  }
+  for (const session of Object.values(legacySessions)) {
+    for (const copy of expandUnassignedSession(session)) state.sessions[copy.key] = copy;
   }
   return state;
 }
@@ -255,7 +285,8 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) flush
 
 /* ═══ 3. Program / context helpers ═══ */
 
-function ctx() { return state.profiles[state.profile] || state.profiles.daughter; }
+function activeProfile() { return PROFILE_INFO[state.profile] ? state.profile : 'daughter'; }
+function ctx() { return state.profiles[activeProfile()]; }
 function program() { return PROGRAMS[ctx().selectedProgramKey] || PROGRAMS.glutePullPush; }
 function gymMode() { return normalizeGymMode(ctx().gymMode); }
 function gymLabel() { return gymMode() === 'office' ? 'Office' : 'YMCA'; }
@@ -288,7 +319,7 @@ function aliasNames(name) {
 
 function ensureSelection() {
   const context = ctx();
-  if (!PROGRAMS[context.selectedProgramKey]) context.selectedProgramKey = defaultProfileContext(state.profile || 'daughter').selectedProgramKey;
+  if (!PROGRAMS[context.selectedProgramKey]) context.selectedProgramKey = defaultProfileContext(activeProfile()).selectedProgramKey;
   const p = program();
   context.selectedWorkoutKey = baseWorkoutKey(context.selectedWorkoutKey);
   if (!context.selectedWorkoutKey || !p.workouts[effectiveWorkoutKey(p.key, context.selectedWorkoutKey, context.gymMode)]) {
@@ -298,11 +329,11 @@ function ensureSelection() {
 
 /* ═══ 4. Sessions & the two-state status engine ═══ */
 
-function newSession(programKey, workoutKey, date, week, gym) {
+function newSession(profile, programKey, workoutKey, date, week, gym) {
   const p = PROGRAMS[programKey], w = p.workouts[workoutKey];
   return {
-    key: sessionKey(date, week, programKey, workoutKey),
-    date, week, programKey, workoutKey,
+    key: sessionKey(profile, date, week, programKey, workoutKey),
+    profile, date, week, programKey, workoutKey,
     gymMode: normalizeGymMode(gym),
     notes: '',
     updatedAt: '',
@@ -327,7 +358,7 @@ function syncSessionWithProgram(session) {
     for (const n of aliasNames(e.originalName)) if (n && !byName.has(n)) byName.set(n, e);
     for (const n of aliasNames(e.actualName)) if (n && !byName.has(n)) byName.set(n, e);
   }
-  const fresh = newSession(session.programKey, session.workoutKey, session.date, session.week, session.gymMode);
+  const fresh = newSession(session.profile, session.programKey, session.workoutKey, session.date, session.week, session.gymMode);
   fresh.key = session.key;
   fresh.notes = session.notes || '';
   fresh.updatedAt = session.updatedAt || '';
@@ -348,12 +379,13 @@ function syncSessionWithProgram(session) {
 
 function currentSession() {
   const p = program();
+  const profile = activeProfile();
   const workoutKey = effectiveWorkoutKey(p.key, ctx().selectedWorkoutKey, ctx().gymMode);
-  const key = sessionKey(activeDate(), currentWeek(), p.key, workoutKey);
+  const key = sessionKey(profile, activeDate(), currentWeek(), p.key, workoutKey);
   if (state.sessions[key]) {
     state.sessions[key] = syncSessionWithProgram(state.sessions[key]);
   } else {
-    state.sessions[key] = newSession(p.key, workoutKey, activeDate(), currentWeek(), ctx().gymMode);
+    state.sessions[key] = newSession(profile, p.key, workoutKey, activeDate(), currentWeek(), ctx().gymMode);
   }
   return state.sessions[key];
 }
@@ -400,7 +432,8 @@ function exerciseVolume(x) {
 }
 
 function weekSessions(week, programKey) {
-  return Object.values(state.sessions).filter(s => s.week === week && s.programKey === programKey);
+  const profile = activeProfile();
+  return Object.values(state.sessions).filter(s => s.profile === profile && s.week === week && s.programKey === programKey);
 }
 
 /* Weekly status for one scheduled workout card, aggregated per
@@ -447,14 +480,16 @@ function nextWorkoutKey() {
 
 /* ═══ 5. History, suggestions, trends ═══ */
 
-/* All history lookups are scoped to the active program — this is what keeps
- * one user's numbers out of the other's hints/suggestions (v1 matched across
- * programs via the alias table, so dad's Hip Thrust suggestions could come
- * from daughter's history and vice versa). */
+/* All history lookups are scoped to the active profile and program — this is
+ * what keeps one user's numbers out of the other's hints/suggestions (v1
+ * matched across programs via the alias table, so dad's Hip Thrust
+ * suggestions could come from daughter's history and vice versa). */
 function historyEntries(name, excludeKey) {
   const names = new Set(aliasNames(name));
+  const profile = activeProfile();
   const results = [];
   for (const session of Object.values(state.sessions)) {
+    if (session.profile !== profile) continue;
     if (session.programKey !== program().key) continue;
     if (excludeKey && session.key === excludeKey) continue;
     if (!sessionHasEntry(session)) continue;
@@ -578,7 +613,8 @@ function trendHTML(name) {
 /* ═══ 6. Stats & entry warnings ═══ */
 
 function programStats() {
-  const sessions = Object.values(state.sessions).filter(s => s.programKey === program().key && sessionHasEntry(s));
+  const profile = activeProfile();
+  const sessions = Object.values(state.sessions).filter(s => s.profile === profile && s.programKey === program().key && sessionHasEntry(s));
   const chrono = [...sessions].sort((a, b) =>
     (a.date || '').localeCompare(b.date || '') || (a.updatedAt || '').localeCompare(b.updatedAt || ''));
   let volume = 0, setCount = 0, prCount = 0;
@@ -751,9 +787,10 @@ function sessionCardHTML(session) {
 
 function renderHistory() {
   const p = program();
+  const profile = activeProfile();
   const stats = programStats();
   const sessions = Object.values(state.sessions)
-    .filter(s => s.programKey === p.key && sessionHasContent(s))
+    .filter(s => s.profile === profile && s.programKey === p.key && sessionHasContent(s))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.updatedAt || '').localeCompare(a.updatedAt || ''));
   // Everything that isn't Done lives in the "In progress" group, including
   // notes/substitution-only sessions — so nothing saved is ever unreachable.
@@ -969,7 +1006,7 @@ function changeSessionDate(newDate) {
   if (!isISODate(newDate)) { toast('Invalid date'); return; }
   const session = currentSession();
   if (session.date === newDate) { ctx().activeDate = newDate; persist(); render(); return; }
-  const targetKey = sessionKey(newDate, session.week, session.programKey, session.workoutKey);
+  const targetKey = sessionKey(session.profile, newDate, session.week, session.programKey, session.workoutKey);
   const target = state.sessions[targetKey];
   const sourceHasData = sessionHasContent(session);
   if (target && sessionHasContent(target) && sourceHasData) {
