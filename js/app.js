@@ -73,6 +73,11 @@ function defaultProfileContext(profileKey) {
     gymMode: 'ymca',
     activeDate: '',
     metricsByDate: {},
+    // '' = no explicit boundary — every session ever logged for this program
+    // counts toward "this week". Set when the user restarts a program at
+    // Week 1, so an earlier cycle's Week 1 sessions don't collide with the
+    // new one (same week number, different training block).
+    blockStartDate: '',
   };
 }
 function defaultState() {
@@ -169,6 +174,7 @@ function normalizeV10(src) {
     if (!PROGRAMS[context.selectedProgramKey]) context.selectedProgramKey = defaultProfileContext(key).selectedProgramKey;
     context.selectedWorkoutKey = baseWorkoutKey(String(context.selectedWorkoutKey || ''));
     context.activeDate = isISODate(context.activeDate) ? context.activeDate : '';
+    context.blockStartDate = isISODate(context.blockStartDate) ? context.blockStartDate : '';
     context.metricsByDate = rawCtx.metricsByDate && typeof rawCtx.metricsByDate === 'object' ? deepClone(rawCtx.metricsByDate) : {};
     state.profiles[key] = context;
   }
@@ -431,9 +437,34 @@ function exerciseVolume(x) {
   return x.sets.reduce((sum, s) => sum + ((Number(s.weight) || 0) * (Number(s.reps) || 0)), 0);
 }
 
+function currentBlockStart() { return ctx().blockStartDate || ''; }
+/* With no block boundary set, every session ever logged counts (unchanged
+ * behavior). Once a boundary exists, only sessions from that date onward
+ * belong to "this week" — otherwise restarting a program at Week 1 collides
+ * with an earlier cycle's Week 1 sessions (same week number, same program). */
+function sessionInCurrentBlock(session) {
+  const start = currentBlockStart();
+  return !start || session.date >= start;
+}
+
 function weekSessions(week, programKey) {
   const profile = activeProfile();
-  return Object.values(state.sessions).filter(s => s.profile === profile && s.week === week && s.programKey === programKey);
+  return Object.values(state.sessions)
+    .filter(s => s.profile === profile && s.week === week && s.programKey === programKey && sessionInCurrentBlock(s));
+}
+
+/* Explicit action only — never inferred from the week stepper wrapping, so
+ * nudging the week down to fix a mis-click can't accidentally wipe out the
+ * current block boundary. */
+function startNewBlock() {
+  const p = program();
+  if (!confirm(`Start a new training block for ${p.shortName}? Week resets to 1. History keeps everything — this only changes which past sessions count toward "this week" and "Next".`)) return;
+  const context = ctx();
+  context.blockStartDate = todayISO();
+  context.currentWeek = 1;
+  persist();
+  render();
+  toast('New block started — Week 1');
 }
 
 /* Weekly status for one scheduled workout card, aggregated per
@@ -652,6 +683,20 @@ function entryWarnings(session) {
   }
   session.exercises.forEach((x, i) => {
     const t = exerciseTemplate(session, i);
+    // One load-sanity check per exercise (not per set) against last time's
+    // working weight — catches fat-finger entries (a stray extra digit, a
+    // missed decimal) without nagging on every set of a legitimate jump.
+    // Gated on a >=20lb prior weight so normal swings on light accessory/
+    // calf work (e.g. 10 -> 15 lb) don't trigger false positives.
+    const last = lastPerformance(x.actualName, x.originalName, session.key);
+    const lastWeight = last ? commonWeight(last.exercise.sets) : 0;
+    const curWeight = commonWeight(x.sets);
+    if (curWeight > 0 && lastWeight >= 20) {
+      const pct = Math.abs(curWeight - lastWeight) / lastWeight;
+      if (pct > 0.45) {
+        out.push(`${x.actualName}: ${curWeight} lb is ${Math.round(pct * 100)}% ${curWeight > lastWeight ? 'higher' : 'lower'} than your last working weight (${lastWeight} lb). Check the entry.`);
+      }
+    }
     x.sets.forEach((s, si) => {
       const w = String(s.weight ?? '').trim(), r = Number(s.reps) || 0;
       const rir = String(s.rir ?? '').trim() === '' ? null : Number(s.rir);
@@ -836,7 +881,7 @@ function renderReference() {
   const showGym = p.key === 'upperLower12';
   let h = `<div class="card"><div class="card-h"><h2>Active program</h2></div><span class="lbl">Program</span><select class="sel mb12" id="rS">${Object.values(PROGRAMS).map(x => `<option value="${escapeHTML(x.key)}" ${x.key === p.key ? 'selected' : ''}>${escapeHTML(x.title)}</option>`).join('')}</select>` +
     (showGym ? `<span class="lbl">Gym</span><div class="gym-choice"><button class="${gymMode() === 'ymca' ? 'on' : ''}" data-gym="ymca">YMCA</button><button class="${gymMode() === 'office' ? 'on' : ''}" data-gym="office">Office Gym</button></div>` : '') +
-    `<div class="ri"><strong>Week ${currentWeek()}</strong> · ${hasDeload(p) ? `Deload W${p.deloadWeek}` : 'No deload'}${showGym ? ` · ${gymLabel()} mode` : ''}</div></div>`;
+    `<div class="ri"><strong>Week ${currentWeek()}</strong> · ${hasDeload(p) ? `Deload W${p.deloadWeek}` : 'No deload'}${showGym ? ` · ${gymLabel()} mode` : ''}${currentBlockStart() ? ` · Block started ${escapeHTML(prettyDate(currentBlockStart()))}` : ''}</div></div>`;
   h += `<div class="card"><div class="card-h"><h2>Program rules</h2></div>${p.checklist.map(l => `<div class="ri">${escapeHTML(l)}</div>`).join('')}</div>`;
   h += `<div class="card"><div class="card-h"><h2>Schedule</h2></div>${scheduled.map(w => {
     const actual = p.workouts[effectiveWorkoutKey(p.key, w.key, ctx().gymMode)] || w;
@@ -867,6 +912,7 @@ function renderSettings() {
     `<div class="gym-choice"><button class="${prefs.autoStart ? 'on' : ''}" data-tpref="autoStart">Auto-start ${prefs.autoStart ? 'On' : 'Off'}</button><button class="bg" id="tPerm" style="border-radius:var(--Rs)">Enable notifications</button></div>` +
     `<div class="acts"><button class="bg" id="tTest">Test alert</button></div></div>`;
   h += `<div class="card"><div class="card-h"><h2>Profile</h2></div><div class="ri mb12">Current: <strong>${state.profile ? escapeHTML(PROFILE_INFO[state.profile].label) : 'Not set'}</strong> — history, week and readiness are kept separately per profile.</div><button class="bg" id="sP">Switch profile</button></div>`;
+  h += `<div class="card"><div class="card-h"><h2>Training block</h2></div><div class="ri mb12">${currentBlockStart() ? `Current block started <strong>${escapeHTML(prettyDate(currentBlockStart()))}</strong>. Weekly status and "Next" only count sessions from that date onward, so an earlier block's Week 1 doesn't collide with this one.` : `No block boundary set — weekly status counts every session ever logged at each week number. Set one when you restart ${escapeHTML(program().shortName)} from Week 1.`}</div><button class="bg" id="sBlk">Start new block (reset to Week 1)</button></div>`;
   if (program().key === 'upperLower12') {
     h += `<div class="card"><div class="card-h"><h2>Gym mode</h2><span class="hint">${gymLabel()}</span></div><div class="ri mb12">Office mode automatically swaps Lower A and Lower B to office-gym versions. Upper days stay unchanged.</div><div class="gym-choice"><button class="${gymMode() === 'ymca' ? 'on' : ''}" data-gym="ymca">YMCA</button><button class="${gymMode() === 'office' ? 'on' : ''}" data-gym="office">Office Gym</button></div></div>`;
   }
@@ -1153,6 +1199,7 @@ function bindStaticEvents() {
       case 'nxB': document.getElementById('aBtn').click(); break;
       case 'sR': resetAll(); break;
       case 'sP': switchProfile(); break;
+      case 'sBlk': startNewBlock(); break;
       case 'tPerm': enableNotifications(); break;
       case 'tTest': testTimerAlert(); break;
     }
