@@ -30,7 +30,7 @@ lowerAOffice:{key:'lowerAOffice',dayNumber:2.1,day:'Tuesday / Office',name:'Lowe
 {name:'Landmine Squat',sets:3,repsMin:10,repsMax:12,rirTarget:2,rest:150,type:'compound',region:'lower',step:10,note:'Lower spinal load than a straight-bar squat. Smooth reps.'},
 {name:'Spanish Squat / Cable Knee Extension',sets:2,repsMin:15,repsMax:20,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'Leg-extension replacement. Controlled burn, not sloppy failure.'},
 {name:'Cable Leg Curl',sets:3,repsMin:10,repsMax:15,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'Use cable, DB, band, or KBox setup if practical.'},
-{name:'Standing Calf Raise',sets:4,repsMin:10,repsMax:15,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'DB, SSB, or rack-supported. Full ROM.'}]},
+{name:'Standing Calf Raise',sets:3,repsMin:10,repsMax:15,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'DB, SSB, or rack-supported. Full ROM. Add a 4th set only if load is limited or calves are a priority.'}]},
 upperB:{key:'upperB',dayNumber:4,day:'Thursday',name:'Upper B',focus:'Vertical push / pull',exercises:[
 {name:'Seated Overhead Press',sets:3,repsMin:5,repsMax:8,rirTarget:2,rest:180,note:'Reduced to 3 sets. No heavy overhead failure.',type:'compound',region:'upper',step:5},
 {name:'Weighted Pull-up / Lat Pulldown',sets:4,repsMin:6,repsMax:10,rirTarget:2,rest:180,type:'compound',region:'upper',step:5,note:'Main vertical pull. Add reps before load.'},
@@ -47,9 +47,9 @@ lowerB:{key:'lowerB',dayNumber:5,day:'Friday',name:'Lower B',focus:'YMCA posteri
 lowerBOffice:{key:'lowerBOffice',dayNumber:5.1,day:'Friday / Office',name:'Lower B — Office',focus:'Office gym posterior chain',autoSchedule:false,exercises:[
 {name:'Barbell Romanian Deadlift',sets:3,repsMin:6,repsMax:8,rirTarget:2,rest:180,type:'compound',region:'lower',step:10,note:'Controlled posterior-chain work. No failure and no back-position loss.'},
 {name:'Hand-Supported Split Squat',sets:2,repsMin:8,repsMax:10,rirTarget:3,rest:150,type:'compound',region:'lower',step:5,note:'Per side. Start weaker/stiffer side. Hand support keeps the back quiet.'},
-{name:'Barbell Hip Thrust / Glute Bridge',sets:3,repsMin:8,repsMax:12,rirTarget:2,rest:150,type:'compound',region:'lower',step:10,note:'Glute volume without turning the session into a squat day.'},
+{name:'Barbell Hip Thrust / Glute Bridge',sets:3,repsMin:8,repsMax:12,rirTarget:2,rest:150,type:'compound',region:'lower',step:10,note:'Glute volume without turning the session into a squat day. Log which variant: a true barbell hip thrust loads heavier (often 150lb+); a DB glute bridge is usually much lighter — keep the logged weight consistent with whichever you actually did.'},
 {name:'Cable Leg Curl',sets:3,repsMin:10,repsMax:15,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'Cable, DB, band, or KBox curl if setup is practical.'},
-{name:'Seated DB Calf Raise',sets:4,repsMin:12,repsMax:20,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'DB across knees or single-leg variation. Full ROM.'}]}},
+{name:'Seated DB Calf Raise',sets:3,repsMin:12,repsMax:20,rirTarget:2,rest:90,type:'accessory',region:'lower',step:5,note:'DB across knees or single-leg variation. Full ROM. Add a 4th set only if load is limited or calves are a priority.'}]}},
 substitutions:{
 'Barbell Bench Press':['DB Bench Press','Machine Chest Press','Floor Press','Close-Grip Bench Press','Weighted Dips'],
 'Chest-Supported Row':['T-Bar Row','Chest-Supported DB Row','Machine Row','Seal Row','Pendlay Row'],
@@ -78,7 +78,7 @@ substitutions:{
 'Seated Leg Curl':['Cable Leg Curl','Lying Leg Curl','Nordic Curl','Sliding Leg Curl','Swiss Ball Curl','KBox Hamstring Curl'],
 'Seated Calf Raise':['Seated DB Calf Raise','Single-Leg Calf Raise','45° Calf Raise','Deficit Calf Raise','Leg Press Calf Raise','KBox Calf Raise'],
 'Barbell Romanian Deadlift':['DB Romanian Deadlift','KBox RDL','Trap Bar RDL','Cable Pull-Through','Good Morning'],
-'Barbell Hip Thrust / Glute Bridge':['Barbell Glute Bridge','Smith Hip Thrust','Cable Pull-Through','KBox Hip Thrust','Single-Leg Hip Thrust'],
+'Barbell Hip Thrust / Glute Bridge':['Barbell Hip Thrust','Barbell Glute Bridge','DB Glute Bridge','Smith Hip Thrust','Cable Pull-Through','KBox Hip Thrust','Single-Leg Hip Thrust'],
 'Seated DB Calf Raise':['Single-Leg Calf Raise','KBox Calf Raise','Standing Calf Raise','Deficit Calf Raise','SSB Calf Raise']},
 checklist:['Use double progression: add reps first, then load when all sets hit the top of the range at target RIR.','Compound lifts stay mostly around 2 RIR; occasional 1 RIR is fine, but 0-RIR compound failure is not the goal.','Isolation lifts can occasionally reach 0–1 RIR on the final safe set only; do not stack repeated failure across the whole session.','If a compound hits 0 RIR before the final set, reduce load 5–10% next time.','If back stiffness appears, stop that movement, choose a supported variation, and log the note.','Use the Gym toggle: YMCA keeps machine-based lower days; Office automatically swaps Lower A and Lower B to the office versions.','Deload on week 7: reduce sets about 40–50%, keep movement patterns, use 4–5 RIR, no failure, and no new exercises.','Add 2 × 20–30 minutes Zone 2 cardio weekly after upper days or on non-lifting days if recovery stays good.'],
 referenceSections:[
@@ -134,7 +134,11 @@ const EXERCISE_ALIASES={
   'Goblet Squat or Light Leg Press':['Leg Press (Flat Foot)','Goblet Squat','Light Leg Press'],
   'Hand-Supported Split Squat':['Bulgarian Split Squat','Bulgarian Split Squats','Rear Foot Elevated Split Squat'],
   'Barbell Romanian Deadlift':['Romanian Deadlift','Romanian Deadlifts','Barbell RDL','DB Romanian Deadlift'],
-  'Barbell Hip Thrust / Glute Bridge':['Hip Thrust','Hip Thrusts','Barbell Glute Bridge','Glute Bridge'],
+  // 'DB Glute Bridge' is deliberately NOT in this group: it loads far
+  // lighter than the barbell variants, and conflating it here would make
+  // "Last:"/suggestions compare across equipment (the exact ambiguity this
+  // substitution split exists to remove).
+  'Barbell Hip Thrust / Glute Bridge':['Hip Thrust','Hip Thrusts','Barbell Hip Thrust','Barbell Glute Bridge','Glute Bridge'],
   'Spanish Squat / Cable Knee Extension':['Spanish Squat','Cable Knee Extension','Leg Extension','Leg Extensions'],
   'Cable Leg Curl':['Lying Leg Curl','Seated Leg Curl','Hamstring Curls','Swiss Ball Leg Curl','DB Leg Curl'],
   'Seated DB Calf Raise':['Seated Calf Raise','Seated Dumbbell Calf Raise'],
