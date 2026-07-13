@@ -45,10 +45,12 @@ function escapeHTML(value) {
 }
 function clampWeek(week) { return Math.max(WEEK_MIN, Math.min(WEEK_MAX, Number(week) || WEEK_MIN)); }
 function isISODate(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); }
-function todayISO() {
+function dateISOFromToday(deltaDays) {
   const now = new Date();
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  const shifted = new Date(now.getTime() - now.getTimezoneOffset() * 60000 + deltaDays * 86400000);
+  return shifted.toISOString().split('T')[0];
 }
+function todayISO() { return dateISOFromToday(0); }
 function prettyDate(iso) {
   const d = iso ? new Date(iso + 'T12:00:00') : new Date();
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
@@ -78,6 +80,13 @@ function defaultProfileContext(profileKey) {
     // Week 1, so an earlier cycle's Week 1 sessions don't collide with the
     // new one (same week number, different training block).
     blockStartDate: '',
+    // Highest week already auto-advanced past — makes maybeAutoAdvanceWeek
+    // idempotent (see there).
+    autoAdvancedThroughWeek: 0,
+    // Local-only weekly planning: when the Sunday review was last approved,
+    // and the default time-of-day used for calendar export.
+    weekReviewedFor: '',
+    workoutTimeOfDay: '17:00',
   };
 }
 function defaultState() {
@@ -175,6 +184,10 @@ function normalizeV10(src) {
     context.selectedWorkoutKey = baseWorkoutKey(String(context.selectedWorkoutKey || ''));
     context.activeDate = isISODate(context.activeDate) ? context.activeDate : '';
     context.blockStartDate = isISODate(context.blockStartDate) ? context.blockStartDate : '';
+    // 0 is a valid sentinel ("never auto-advanced") distinct from clampWeek's [1,12] range.
+    context.autoAdvancedThroughWeek = Math.max(0, Math.min(WEEK_MAX, Number(context.autoAdvancedThroughWeek) || 0));
+    context.weekReviewedFor = isISODate(context.weekReviewedFor) ? context.weekReviewedFor : '';
+    context.workoutTimeOfDay = /^([01]\d|2[0-3]):[0-5]\d$/.test(context.workoutTimeOfDay || '') ? context.workoutTimeOfDay : '17:00';
     context.metricsByDate = rawCtx.metricsByDate && typeof rawCtx.metricsByDate === 'object' ? deepClone(rawCtx.metricsByDate) : {};
     state.profiles[key] = context;
   }
@@ -509,6 +522,69 @@ function nextWorkoutKey() {
   return (upcoming || byDay[0] || {}).key || '';
 }
 
+function weekFullyDone(week, p) {
+  const scheduled = scheduledWorkouts(p);
+  return scheduled.length > 0 && scheduled.every(w => {
+    const matches = weekSessions(week, p.key).filter(s => baseWorkoutKey(s.workoutKey) === w.key);
+    return matches.some(s => sessionStatus(s) === 'done');
+  });
+}
+
+/* Auto-advances the week once every scheduled workout is Done, so you don't
+ * have to remember to bump the stepper. Weeks 1-11 only — reaching 12 means
+ * the block itself is complete, and that's the explicit "Start new block"
+ * decision (see startNewBlock), not something to silently wrap around to
+ * Week 1. autoAdvancedThroughWeek makes this idempotent: it only fires once
+ * per week, so manually stepping back to a finished week never re-triggers
+ * it, and it can't loop forever advancing through already-complete history. */
+function maybeAutoAdvanceWeek() {
+  const p = program(), context = ctx(), week = clampWeek(context.currentWeek);
+  if (week >= WEEK_MAX || Number(context.autoAdvancedThroughWeek) >= week) return false;
+  if (!weekFullyDone(week, p)) return false;
+  context.autoAdvancedThroughWeek = week;
+  context.currentWeek = clampWeek(week + 1);
+  return true;
+}
+
+/* Next scheduled workout + the actual calendar date it next falls on (today
+ * excluded, since "next" is shown right after finishing today's session). */
+function nextScheduledInfo() {
+  const p = program();
+  const key = nextWorkoutKey();
+  const w = scheduledWorkouts(p).find(x => x.key === key);
+  if (!w) return null;
+  const actual = p.workouts[effectiveWorkoutKey(p.key, key, ctx().gymMode)] || w;
+  const todayDow = new Date().getDay();
+  let delta = (w.dayNumber || 0) - todayDow;
+  if (delta <= 0) delta += 7;
+  return { name: actual.name, day: w.day, date: dateISOFromToday(delta) };
+}
+
+/* Pure date-only arithmetic via local Y/M/D components — deliberately avoids
+ * both `new Date(iso)` (parsed as UTC midnight per spec, one day off in most
+ * US timezones) and any UTC round-trip, so month/year rollovers are handled
+ * by the Date object's local setters without a timezone-shift bug. */
+function addDaysISO(dateISO, days) {
+  const [y, m, d] = dateISO.split('-').map(Number);
+  const base = new Date(y, m - 1, d);
+  base.setDate(base.getDate() + days);
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`;
+}
+function mostRecentSunday() { return dateISOFromToday(-new Date().getDay()); }
+
+/* One review per calendar week (anchored at the most recent Sunday), per
+ * profile — approving or dismissing stamps weekReviewedFor so it won't
+ * prompt again until the following Sunday rolls around. */
+function weekReviewPending() { return ctx().weekReviewedFor !== mostRecentSunday(); }
+
+function weekScheduleForSunday(sunday) {
+  const p = program();
+  return scheduledWorkouts(p).map(w => {
+    const actual = p.workouts[effectiveWorkoutKey(p.key, w.key, ctx().gymMode)] || w;
+    return { day: w.day, name: actual.name, focus: actual.focus || '', date: addDaysISO(sunday, w.dayNumber || 0) };
+  });
+}
+
 /* ═══ 5. History, suggestions, trends ═══ */
 
 /* All history lookups are scoped to the active profile and program — this is
@@ -768,7 +844,9 @@ function renderToday() {
   const metrics = metricsFor(session.date);
   const showGym = p.key === 'upperLower12';
 
-  let h = `<div class="card"><div class="card-h"><h2>${escapeHTML(p.title)}</h2><span class="hint" id="setsHint">${sets.done}/${sets.total} sets</span></div>` +
+  let h = completionBannerHTML();
+  if (weekReviewPending()) h += weekReviewCardHTML();
+  h += `<div class="card"><div class="card-h"><h2>${escapeHTML(p.title)}</h2><span class="hint" id="setsHint">${sets.done}/${sets.total} sets</span></div>` +
     `<span class="lbl">Program</span><select class="sel mb12" id="pS" aria-label="Program">${Object.values(PROGRAMS).map(x => `<option value="${escapeHTML(x.key)}" ${x.key === p.key ? 'selected' : ''}>${escapeHTML(x.title)}</option>`).join('')}</select>` +
     (showGym ? `<span class="lbl">Gym</span><div class="gym-choice"><button class="${gymMode() === 'ymca' ? 'on' : ''}" data-gym="ymca">YMCA</button><button class="${gymMode() === 'office' ? 'on' : ''}" data-gym="office">Office Gym</button></div>` : '') +
     `<span class="lbl">Workout date</span><input class="sel mb12" type="date" id="wDate" value="${escapeHTML(session.date)}">` +
@@ -830,6 +908,11 @@ function sessionCardHTML(session) {
     `</span></div><div class="hi-acts"><button data-open="${escapeHTML(session.key)}">Open</button><button class="red" data-del="${escapeHTML(session.key)}">Delete</button></div></div>`;
 }
 
+/* 'sessions' (default) or 'exercises' — split so picking an exercise never
+ * requires scrolling past the full session list to reach the picker. */
+let historySubTab = 'sessions';
+let historyFilter = '';
+
 function renderHistory() {
   const p = program();
   const profile = activeProfile();
@@ -837,19 +920,29 @@ function renderHistory() {
   const sessions = Object.values(state.sessions)
     .filter(s => s.profile === profile && s.programKey === p.key && sessionHasContent(s))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+  const names = [...new Set(sessions.flatMap(s => s.exercises.filter(x => x.sets.some(setHasEntry)).map(x => x.actualName)))].sort();
+
+  let h = `<div class="card"><div class="stats"><div class="st"><strong>${stats.sessions}</strong><span>Sessions</span></div><div class="st"><strong>${stats.volume.toLocaleString()}</strong><span>Volume</span></div><div class="st"><strong>${stats.sets}</strong><span>Sets</span></div><div class="st"><strong>${names.length}</strong><span>Moves</span></div></div></div>`;
+  h += `<div class="tabs" style="padding-top:0"><button class="tab ${historySubTab === 'sessions' ? 'on' : ''}" data-hsub="sessions">Sessions</button><button class="tab ${historySubTab === 'exercises' ? 'on' : ''}" data-hsub="exercises">By Exercise</button></div>`;
+
+  h += historySubTab === 'exercises' ? renderHistoryByExercise(sessions, names) : renderHistorySessions(sessions);
+  return h + '<div class="spacer"></div>';
+}
+
+function renderHistorySessions(sessions) {
   // Everything that isn't Done lives in the "In progress" group, including
   // notes/substitution-only sessions — so nothing saved is ever unreachable.
   const inProgress = sessions.filter(s => sessionStatus(s) !== 'done');
   const done = sessions.filter(s => sessionStatus(s) === 'done');
-  const names = [...new Set(sessions.flatMap(s => s.exercises.filter(x => x.sets.some(setHasEntry)).map(x => x.actualName)))].sort();
-
-  let h = `<div class="card"><div class="stats"><div class="st"><strong>${stats.sessions}</strong><span>Sessions</span></div><div class="st"><strong>${stats.volume.toLocaleString()}</strong><span>Volume</span></div><div class="st"><strong>${stats.sets}</strong><span>Sets</span></div><div class="st"><strong>${names.length}</strong><span>Moves</span></div></div></div>`;
-
+  let h = '';
   if (inProgress.length) {
     h += `<div class="card"><div class="card-h"><h2>In progress</h2><span class="hint">${inProgress.length}</span></div>${inProgress.map(sessionCardHTML).join('')}</div>`;
   }
   h += `<div class="card"><div class="card-h"><h2>Done</h2><span class="hint">${done.length}</span></div>${done.length ? done.map(sessionCardHTML).join('') : '<div class="hi">No completed workouts yet. A workout shows here once every planned exercise is complete.</div>'}</div>`;
+  return h;
+}
 
+function renderHistoryByExercise(sessions, names) {
   const filter = names.includes(historyFilter) ? historyFilter : '';
   const rows = [];
   for (const s of sessions) {
@@ -869,10 +962,9 @@ function renderHistory() {
     const t = getTrend(filter, 12);
     if (t) trendBlock = `<div class="hi" style="background:rgba(99,220,255,.04);border-color:rgba(99,220,255,.12)"><div class="hi-tp"><span class="hi-n" style="color:var(--ac)">Trend</span><span class="hi-v">${t.points[t.points.length - 1].weight} lb</span></div><div class="ex-spark" style="margin-top:4px">${sparkSVG(t.points, 120, 28)}<span class="${t.up ? 'spark-up' : t.flat ? '' : 'spark-dn'}">${t.up ? '↑' : t.flat ? '→' : '↓'} ${t.up ? '+' : ''}${t.delta} lb (${t.up ? '+' : ''}${t.pct}%) over ${t.points.length} sessions</span></div></div>`;
   }
-  h += `<div class="card"><div class="card-h"><h2>Exercise history</h2></div><span class="lbl">Filter</span><select class="sel mb12" id="hF"><option value="">All</option>${names.map(n => `<option value="${escapeHTML(n)}" ${n === filter ? 'selected' : ''}>${escapeHTML(n)}</option>`).join('')}</select>${trendBlock}` +
+  return `<div class="card"><div class="card-h"><h2>Exercise history</h2></div><span class="lbl">Filter</span><select class="sel mb12" id="hF"><option value="">All</option>${names.map(n => `<option value="${escapeHTML(n)}" ${n === filter ? 'selected' : ''}>${escapeHTML(n)}</option>`).join('')}</select>${trendBlock}` +
     (rows.length ? rows.map(r => `<div class="hi"><div class="hi-tp"><span class="hi-n">${escapeHTML(r.name)}</span><span class="hi-v">${r.volume.toLocaleString()}</span></div><div class="hi-m">${escapeHTML(prettyDate(r.date))} · Week ${r.week} · ${escapeHTML(r.gym)} · ${escapeHTML(r.workout)}</div>${r.name !== r.original ? `<div class="hi-m">Subbed from ${escapeHTML(r.original)}</div>` : ''}<div class="hi-s">${escapeHTML(r.summary)}</div></div>`).join('') : '<div class="hi">No exercise history yet.</div>') +
-    `</div><div class="spacer"></div>`;
-  return h;
+    `</div>`;
 }
 
 function renderReference() {
@@ -920,7 +1012,6 @@ function renderSettings() {
   return h;
 }
 
-let historyFilter = '';
 let renderQueued = false;
 function render() {
   if (renderQueued) return;
@@ -987,6 +1078,52 @@ function refreshSecondaryUI() {
 
 function touchSession(session) { session.updatedAt = new Date().toISOString(); }
 
+/* In-memory only (not persisted) — a "just now" celebratory moment, not a
+ * durable notification. Cleared by an explicit dismiss or replaced by the
+ * next completion. */
+let completionBanner = null;
+
+/* Fires once, on the true empty/partial → done edge (mirrors the existing
+ * set-level wasComplete/complete pattern in onSetFieldInput below), not on
+ * every render of an already-done session. */
+function celebrateCompletion(session) {
+  const p = program();
+  const week = session.week;
+  maybeAutoAdvanceWeek();
+  const fullyDone = weekFullyDone(week, p);
+  let banner = null;
+  if (fullyDone && week >= WEEK_MAX) {
+    banner = { kind: 'block', week };
+  } else {
+    const next = nextScheduledInfo();
+    if (next) banner = { kind: 'next', name: next.name, day: next.day, date: next.date };
+  }
+  if (!banner) return;
+  completionBanner = banner;
+  if (navigator.vibrate && timerPref('vibrate')) navigator.vibrate([30, 60, 30, 60, 120]);
+  toast(banner.kind === 'block' ? 'Block complete!' : 'Workout complete!');
+}
+
+function completionBannerHTML() {
+  if (!completionBanner) return '';
+  const b = completionBanner;
+  const body = b.kind === 'block'
+    ? `<strong>Block complete! 🎉</strong><br>All ${WEEK_MAX} weeks done. Start a new block in Settings when you're ready to go again.`
+    : `<strong>Workout complete! 💪</strong><br>See you ${escapeHTML(b.day)} for ${escapeHTML(b.name)} · ${escapeHTML(prettyDate(b.date))}`;
+  return `<div class="bn bn-i mb8" id="completionBanner" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><div>${body}</div><button id="completionX" aria-label="Dismiss" style="flex-shrink:0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:4px 8px;font-size:12px;color:inherit">✕</button></div>`;
+}
+
+function weekReviewCardHTML() {
+  const p = program();
+  const sunday = mostRecentSunday();
+  const items = weekScheduleForSunday(sunday);
+  const rows = items.map(it => `<div class="ri"><strong>${escapeHTML(it.day)}</strong> — ${escapeHTML(it.name)}<br><span style="color:var(--t3);font-size:12px">${escapeHTML(prettyDate(it.date))}</span></div>`).join('');
+  return `<div class="card" id="weekReviewCard"><div class="card-h"><h2>Review this week</h2><span class="hint">${escapeHTML(p.shortName)}</span></div>` +
+    `<div class="ri mb12">Approve this week's schedule to download a calendar file — one tap adds all ${items.length} workouts to your phone's Calendar app.</div>${rows}` +
+    `<span class="lbl">Workout time</span><input type="time" class="sel mb12" id="wrTime" value="${escapeHTML(ctx().workoutTimeOfDay)}">` +
+    `<div class="acts"><button class="bg" id="wrDismiss">Dismiss</button><button class="bp" id="wrApprove">Approve &amp; add to calendar</button></div></div>`;
+}
+
 function onSetFieldInput(input) {
   const [ei, si, field] = input.dataset.f.split('-');
   const session = currentSession();
@@ -999,6 +1136,7 @@ function onSetFieldInput(input) {
   }
   const set = exercise.sets[Number(si)];
   if (!set) return;
+  const wasSessionDone = sessionStatus(session) === 'done';
   set[field] = input.value;
   touchSession(session);
   persistSoon();
@@ -1008,6 +1146,12 @@ function onSetFieldInput(input) {
     const wasComplete = row.classList.contains('dn');
     row.classList.toggle('dn', complete);
     if (!wasComplete && complete) maybeAutoStartRest(Number(ei), Number(si), input);
+  }
+  if (!wasSessionDone && sessionStatus(session) === 'done') {
+    celebrateCompletion(session);
+    persist();
+    render(); // week/header may have changed — a full render, not the light path
+    return;
   }
   refreshEntryUI();
 }
@@ -1179,6 +1323,8 @@ function bindStaticEvents() {
     if (openBtn) { openSession(openBtn.dataset.open); return; }
     const deleteBtn = e.target.closest('[data-del]');
     if (deleteBtn) { deleteSession(deleteBtn.dataset.del); return; }
+    const hsubBtn = e.target.closest('[data-hsub]');
+    if (hsubBtn) { historySubTab = hsubBtn.dataset.hsub; render(); return; }
     const gymBtn = e.target.closest('[data-gym]');
     if (gymBtn) {
       ctx().gymMode = normalizeGymMode(gymBtn.dataset.gym);
@@ -1202,6 +1348,9 @@ function bindStaticEvents() {
       case 'sBlk': startNewBlock(); break;
       case 'tPerm': enableNotifications(); break;
       case 'tTest': testTimerAlert(); break;
+      case 'completionX': completionBanner = null; document.getElementById('completionBanner')?.remove(); break;
+      case 'wrApprove': approveWeekReview(); break;
+      case 'wrDismiss': dismissWeekReview(); break;
     }
   });
   content.addEventListener('change', e => {
@@ -1420,6 +1569,74 @@ function exportData() {
   a.click();
   URL.revokeObjectURL(url);
   toast('Exported');
+}
+
+function downloadFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* Generates a standard .ics (RFC 5545) calendar file client-side — no
+ * backend, no Calendar API/OAuth. DTSTART/DTEND are deliberately "floating"
+ * local time (no timezone suffix), which iOS Calendar and Google Calendar
+ * both interpret as the importing device's local time; that's the right
+ * behavior for a personal workout reminder and avoids needing a VTIMEZONE
+ * block. Re-approving the same week with a new time reuses the same UIDs
+ * (date-derived), so re-importing updates those events rather than
+ * duplicating them. */
+function icsEscapeText(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+function icsDateTime(dateISO, timeHHMM) {
+  const [y, m, d] = dateISO.split('-');
+  const [hh, mm] = (timeHHMM || '17:00').split(':');
+  return `${y}${m}${d}T${hh.padStart(2, '0')}${mm.padStart(2, '0')}00`;
+}
+function icsDateTimePlusMinutes(dateISO, timeHHMM, minutes) {
+  const [y, m, d] = dateISO.split('-').map(Number);
+  const [hh, mm] = (timeHHMM || '17:00').split(':').map(Number);
+  const dt = new Date(y, m - 1, d, hh, mm + minutes);
+  return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, '0')}${String(dt.getDate()).padStart(2, '0')}` +
+    `T${String(dt.getHours()).padStart(2, '0')}${String(dt.getMinutes()).padStart(2, '0')}00`;
+}
+function buildWeekICS(sunday, timeHHMM) {
+  const items = weekScheduleForSunday(sunday);
+  const stamp = `${icsDateTime(todayISO(), '00:00')}Z`;
+  const events = items.map((it, i) => [
+    'BEGIN:VEVENT',
+    `UID:workout-${it.date.replace(/-/g, '')}-${i}@workout-app`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART:${icsDateTime(it.date, timeHHMM)}`,
+    `DTEND:${icsDateTimePlusMinutes(it.date, timeHHMM, 75)}`,
+    `SUMMARY:${icsEscapeText(it.name)}`,
+    it.focus ? `DESCRIPTION:${icsEscapeText(it.focus)}` : '',
+    'END:VEVENT',
+  ].filter(Boolean).join('\r\n'));
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Workout App//v2//EN', 'CALSCALE:GREGORIAN', ...events, 'END:VCALENDAR'].join('\r\n') + '\r\n';
+}
+
+function approveWeekReview() {
+  const timeInput = document.getElementById('wrTime');
+  const time = timeInput && /^([01]\d|2[0-3]):[0-5]\d$/.test(timeInput.value) ? timeInput.value : ctx().workoutTimeOfDay;
+  const sunday = mostRecentSunday();
+  ctx().workoutTimeOfDay = time;
+  ctx().weekReviewedFor = sunday;
+  persist();
+  downloadFile(`workout-week-${sunday}.ics`, buildWeekICS(sunday, time), 'text/calendar;charset=utf-8');
+  render();
+  toast('Week approved — calendar file downloaded');
+}
+
+function dismissWeekReview() {
+  ctx().weekReviewedFor = mostRecentSunday();
+  persist();
+  render();
+  toast('Dismissed for this week');
 }
 
 function importData(file) {
