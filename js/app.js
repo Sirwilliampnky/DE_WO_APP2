@@ -33,6 +33,7 @@ const LEGACY_KEYS = ['workout_v9_state', 'workout_v8_state', 'workout_v7_state',
   'workout_v6_state', 'workout_v5_state', 'workout_v4_state', 'workout_v3_state'];
 const WEEK_MIN = 1, WEEK_MAX = 12;
 const TABS = ['today', 'history', 'reference', 'settings'];
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const PROFILE_INFO = {
   dad: { label: 'Upper / Lower', defaultProgram: 'upperLower12' },
   daughter: { label: 'Glute Split', defaultProgram: 'glutePullPush' },
@@ -87,6 +88,12 @@ function defaultProfileContext(profileKey) {
     // and the default time-of-day used for calendar export.
     weekReviewedFor: '',
     workoutTimeOfDay: '17:00',
+    // Per-workout calendar overrides: { [baseWorkoutKey]: {dayNumber, time} }.
+    // Only entries the user has explicitly customized; a workout with no
+    // entry here falls back to the program's own scheduled day and
+    // workoutTimeOfDay. Persists week over week until changed again — this
+    // customizes the workout's calendar slot, not just a single export.
+    workoutScheduleOverrides: {},
   };
 }
 function defaultState() {
@@ -170,6 +177,18 @@ function migrateAny(raw) {
   return (Number(src.version) >= 10 || src.sessions) ? normalizeV10(src) : migrateLegacy(src);
 }
 
+function normalizeScheduleOverrides(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [key, v] of Object.entries(raw)) {
+    if (!v || typeof v !== 'object') continue;
+    const dayNumber = Number(v.dayNumber);
+    const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(v.time || '') ? v.time : '';
+    if (Number.isInteger(dayNumber) && dayNumber >= 0 && dayNumber <= 6 && time) out[key] = { dayNumber, time };
+  }
+  return out;
+}
+
 function normalizeV10(src) {
   const state = defaultState();
   if (PROFILE_INFO[src.profile]) state.profile = src.profile;
@@ -188,6 +207,7 @@ function normalizeV10(src) {
     context.autoAdvancedThroughWeek = Math.max(0, Math.min(WEEK_MAX, Number(context.autoAdvancedThroughWeek) || 0));
     context.weekReviewedFor = isISODate(context.weekReviewedFor) ? context.weekReviewedFor : '';
     context.workoutTimeOfDay = /^([01]\d|2[0-3]):[0-5]\d$/.test(context.workoutTimeOfDay || '') ? context.workoutTimeOfDay : '17:00';
+    context.workoutScheduleOverrides = normalizeScheduleOverrides(rawCtx.workoutScheduleOverrides);
     context.metricsByDate = rawCtx.metricsByDate && typeof rawCtx.metricsByDate === 'object' ? deepClone(rawCtx.metricsByDate) : {};
     state.profiles[key] = context;
   }
@@ -549,18 +569,44 @@ function maybeAutoAdvanceWeek() {
   return true;
 }
 
+/* A workout's calendar day/time, honoring any user customization from the
+ * Sunday review card — falls back to the program's own scheduled day and
+ * the profile's default time when nothing's been customized. */
+function workoutScheduleOverride(key) { return (ctx().workoutScheduleOverrides || {})[key] || null; }
+function scheduledDayNumber(w) {
+  const override = workoutScheduleOverride(w.key);
+  return override ? override.dayNumber : (w.dayNumber || 0);
+}
+function scheduledTime(w) {
+  const override = workoutScheduleOverride(w.key);
+  return override ? override.time : ctx().workoutTimeOfDay;
+}
+
 /* Next scheduled workout + the actual calendar date it next falls on (today
  * excluded, since "next" is shown right after finishing today's session). */
 function nextScheduledInfo() {
   const p = program();
-  const key = nextWorkoutKey();
-  const w = scheduledWorkouts(p).find(x => x.key === key);
-  if (!w) return null;
-  const actual = p.workouts[effectiveWorkoutKey(p.key, key, ctx().gymMode)] || w;
+  // Deliberately NOT nextWorkoutKey(): that stays training-order-based (see
+  // scheduledWorkouts/workoutList) so calendar customization never affects
+  // "Next"/auto-advance. This banner is calendar-facing ("see you Monday"),
+  // so among not-yet-done workouts it picks whichever's calendar slot
+  // (respecting day overrides) comes up soonest — otherwise moving a
+  // workout earlier in the week wouldn't be reflected here, and the banner
+  // could point at a later day than what's actually next on the calendar.
+  const infos = scheduledWorkouts(p).map(w => ({ w, status: workoutCardInfo(w.key).status }));
+  const inProgress = infos.filter(i => i.status === 'in-progress');
+  const pool = inProgress.length ? inProgress : infos.filter(i => i.status === 'none');
+  if (!pool.length) return null;
   const todayDow = new Date().getDay();
-  let delta = (w.dayNumber || 0) - todayDow;
-  if (delta <= 0) delta += 7;
-  return { name: actual.name, day: w.day, date: dateISOFromToday(delta) };
+  const withDelta = pool.map(({ w }) => {
+    const dayNumber = scheduledDayNumber(w);
+    let delta = dayNumber - todayDow;
+    if (delta <= 0) delta += 7;
+    return { w, dayNumber, delta };
+  }).sort((a, b) => a.delta - b.delta);
+  const soonest = withDelta[0];
+  const actual = p.workouts[effectiveWorkoutKey(p.key, soonest.w.key, ctx().gymMode)] || soonest.w;
+  return { name: actual.name, day: DAY_NAMES[soonest.dayNumber], date: dateISOFromToday(soonest.delta) };
 }
 
 /* Pure date-only arithmetic via local Y/M/D components — deliberately avoids
@@ -584,7 +630,11 @@ function weekScheduleForSunday(sunday) {
   const p = program();
   return scheduledWorkouts(p).map(w => {
     const actual = p.workouts[effectiveWorkoutKey(p.key, w.key, ctx().gymMode)] || w;
-    return { day: w.day, name: actual.name, focus: actual.focus || '', date: addDaysISO(sunday, w.dayNumber || 0) };
+    const dayNumber = scheduledDayNumber(w);
+    return {
+      key: w.key, dayNumber, day: DAY_NAMES[dayNumber], name: actual.name, focus: actual.focus || '',
+      date: addDaysISO(sunday, dayNumber), time: scheduledTime(w),
+    };
   });
 }
 
@@ -1120,10 +1170,15 @@ function weekReviewCardHTML() {
   const p = program();
   const sunday = mostRecentSunday();
   const items = weekScheduleForSunday(sunday);
-  const rows = items.map(it => `<div class="ri"><strong>${escapeHTML(it.day)}</strong> — ${escapeHTML(it.name)}<br><span style="color:var(--t3);font-size:12px">${escapeHTML(prettyDate(it.date))}</span></div>`).join('');
+  const rows = items.map(it => `<div class="ri">` +
+    `<strong>${escapeHTML(it.name)}</strong>` +
+    `<div class="wr-row">` +
+    `<select class="sel" data-wr-day="${escapeHTML(it.key)}" aria-label="Day for ${escapeHTML(it.name)}">${DAY_NAMES.map((d, i) => `<option value="${i}" ${i === it.dayNumber ? 'selected' : ''}>${d}</option>`).join('')}</select>` +
+    `<input type="time" class="sel" data-wr-time="${escapeHTML(it.key)}" aria-label="Time for ${escapeHTML(it.name)}" value="${escapeHTML(it.time)}">` +
+    `</div>` +
+    `<span style="color:var(--t3);font-size:12px" data-wr-date="${escapeHTML(it.key)}">${escapeHTML(prettyDate(it.date))}</span></div>`).join('');
   return `<div class="card" id="weekReviewCard"><div class="card-h"><h2>Review this week</h2><span class="hint">${escapeHTML(p.shortName)}</span></div>` +
-    `<div class="ri mb12">Approve this week's schedule to download a calendar file — one tap adds all ${items.length} workouts to your phone's Calendar app.</div>${rows}` +
-    `<span class="lbl">Workout time</span><input type="time" class="sel mb12" id="wrTime" value="${escapeHTML(ctx().workoutTimeOfDay)}">` +
+    `<div class="ri mb12">Adjust the day or time for any workout, then approve to download a calendar file — one tap adds all ${items.length} workouts to your phone's Calendar app.</div>${rows}` +
     `<div class="acts"><button class="bg" id="wrDismiss">Dismiss</button><button class="bp" id="wrApprove">Approve &amp; add to calendar</button></div></div>`;
 }
 
@@ -1369,6 +1424,11 @@ function bindStaticEvents() {
     if (t.dataset.sb !== undefined) { setSubstitution(Number(t.dataset.sb), t.value); return; }
     if (t.dataset.f) { refreshSecondaryUI(); return; }
     if (t.id === 'wDate') { changeSessionDate(t.value); return; }
+    if (t.dataset.wrDay !== undefined) {
+      const dateEl = document.querySelector(`[data-wr-date="${t.dataset.wrDay}"]`);
+      if (dateEl) dateEl.textContent = prettyDate(addDaysISO(mostRecentSunday(), Number(t.value)));
+      return;
+    }
     if (t.id === 'hF') { historyFilter = t.value; render(); return; }
     if (t.id === 'sI') { const f = t.files?.[0]; if (f) importData(f); t.value = ''; return; }
   });
@@ -1607,20 +1667,25 @@ function icsDateTimePlusMinutes(dateISO, timeHHMM, minutes) {
   return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, '0')}${String(dt.getDate()).padStart(2, '0')}` +
     `T${String(dt.getHours()).padStart(2, '0')}${String(dt.getMinutes()).padStart(2, '0')}00`;
 }
-function buildWeekICS(sunday, timeHHMM) {
+function buildWeekICS(sunday) {
   const items = weekScheduleForSunday(sunday);
   const stamp = `${icsDateTime(todayISO(), '00:00')}Z`;
   // Profile + program in the UID: without it, dad's and daughter's same-
   // weekday events collide on date+index alone, so importing the second
   // profile's .ics into a shared calendar replaces the first profile's
   // event instead of adding a separate one.
+  // UID is anchored to the week (sunday) + workout key, NOT the possibly-
+  // overridden event date: the date can change (moving a workout to a
+  // different day) while re-approving the SAME week, and a date-derived UID
+  // would make the calendar app treat that as a new event, leaving the old
+  // one behind as a stale duplicate instead of updating it in place.
   const uidScope = `${activeProfile()}-${program().key}`;
-  const events = items.map((it, i) => [
+  const events = items.map(it => [
     'BEGIN:VEVENT',
-    `UID:workout-${uidScope}-${it.date.replace(/-/g, '')}-${i}@workout-app`,
+    `UID:workout-${uidScope}-${sunday.replace(/-/g, '')}-${it.key}@workout-app`,
     `DTSTAMP:${stamp}`,
-    `DTSTART:${icsDateTime(it.date, timeHHMM)}`,
-    `DTEND:${icsDateTimePlusMinutes(it.date, timeHHMM, 75)}`,
+    `DTSTART:${icsDateTime(it.date, it.time)}`,
+    `DTEND:${icsDateTimePlusMinutes(it.date, it.time, 75)}`,
     `SUMMARY:${icsEscapeText(it.name)}`,
     it.focus ? `DESCRIPTION:${icsEscapeText(it.focus)}` : '',
     'END:VEVENT',
@@ -1629,13 +1694,20 @@ function buildWeekICS(sunday, timeHHMM) {
 }
 
 function approveWeekReview() {
-  const timeInput = document.getElementById('wrTime');
-  const time = timeInput && /^([01]\d|2[0-3]):[0-5]\d$/.test(timeInput.value) ? timeInput.value : ctx().workoutTimeOfDay;
+  const p = program();
+  const overrides = { ...(ctx().workoutScheduleOverrides || {}) };
+  scheduledWorkouts(p).forEach(w => {
+    const dayInput = document.querySelector(`[data-wr-day="${w.key}"]`);
+    const timeInput = document.querySelector(`[data-wr-time="${w.key}"]`);
+    const dayNumber = dayInput ? Number(dayInput.value) : (w.dayNumber || 0);
+    const time = timeInput && /^([01]\d|2[0-3]):[0-5]\d$/.test(timeInput.value) ? timeInput.value : ctx().workoutTimeOfDay;
+    overrides[w.key] = { dayNumber: Number.isInteger(dayNumber) && dayNumber >= 0 && dayNumber <= 6 ? dayNumber : (w.dayNumber || 0), time };
+  });
   const sunday = mostRecentSunday();
-  ctx().workoutTimeOfDay = time;
+  ctx().workoutScheduleOverrides = overrides;
   ctx().weekReviewedFor = sunday;
   persist();
-  downloadFile(`workout-week-${sunday}.ics`, buildWeekICS(sunday, time), 'text/calendar;charset=utf-8');
+  downloadFile(`workout-week-${sunday}.ics`, buildWeekICS(sunday), 'text/calendar;charset=utf-8');
   render();
   toast('Week approved — calendar file downloaded');
 }

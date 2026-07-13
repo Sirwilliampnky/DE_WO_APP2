@@ -185,6 +185,9 @@
        text-entry controls at 16px now that pinch zoom is re-enabled. */
     .mf input,.sel,.ex-sb,.notes{font-size:16px}
 
+    /* Per-workout day + time controls on the weekly review card */
+    .wr-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 4px}
+
     /* Session status line (replaces the old save banners) */
     .stat-line{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--Rs);margin-bottom:10px;background:rgba(255,255,255,.02);border:1px solid var(--bdr);font-size:13px;color:var(--t2)}
     .stat-line .tag{flex-shrink:0}
