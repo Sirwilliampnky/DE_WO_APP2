@@ -586,15 +586,27 @@ function scheduledTime(w) {
  * excluded, since "next" is shown right after finishing today's session). */
 function nextScheduledInfo() {
   const p = program();
-  const key = nextWorkoutKey();
-  const w = scheduledWorkouts(p).find(x => x.key === key);
-  if (!w) return null;
-  const actual = p.workouts[effectiveWorkoutKey(p.key, key, ctx().gymMode)] || w;
-  const dayNumber = scheduledDayNumber(w);
+  // Deliberately NOT nextWorkoutKey(): that stays training-order-based (see
+  // scheduledWorkouts/workoutList) so calendar customization never affects
+  // "Next"/auto-advance. This banner is calendar-facing ("see you Monday"),
+  // so among not-yet-done workouts it picks whichever's calendar slot
+  // (respecting day overrides) comes up soonest — otherwise moving a
+  // workout earlier in the week wouldn't be reflected here, and the banner
+  // could point at a later day than what's actually next on the calendar.
+  const infos = scheduledWorkouts(p).map(w => ({ w, status: workoutCardInfo(w.key).status }));
+  const inProgress = infos.filter(i => i.status === 'in-progress');
+  const pool = inProgress.length ? inProgress : infos.filter(i => i.status === 'none');
+  if (!pool.length) return null;
   const todayDow = new Date().getDay();
-  let delta = dayNumber - todayDow;
-  if (delta <= 0) delta += 7;
-  return { name: actual.name, day: DAY_NAMES[dayNumber], date: dateISOFromToday(delta) };
+  const withDelta = pool.map(({ w }) => {
+    const dayNumber = scheduledDayNumber(w);
+    let delta = dayNumber - todayDow;
+    if (delta <= 0) delta += 7;
+    return { w, dayNumber, delta };
+  }).sort((a, b) => a.delta - b.delta);
+  const soonest = withDelta[0];
+  const actual = p.workouts[effectiveWorkoutKey(p.key, soonest.w.key, ctx().gymMode)] || soonest.w;
+  return { name: actual.name, day: DAY_NAMES[soonest.dayNumber], date: dateISOFromToday(soonest.delta) };
 }
 
 /* Pure date-only arithmetic via local Y/M/D components — deliberately avoids
@@ -1662,10 +1674,15 @@ function buildWeekICS(sunday) {
   // weekday events collide on date+index alone, so importing the second
   // profile's .ics into a shared calendar replaces the first profile's
   // event instead of adding a separate one.
+  // UID is anchored to the week (sunday) + workout key, NOT the possibly-
+  // overridden event date: the date can change (moving a workout to a
+  // different day) while re-approving the SAME week, and a date-derived UID
+  // would make the calendar app treat that as a new event, leaving the old
+  // one behind as a stale duplicate instead of updating it in place.
   const uidScope = `${activeProfile()}-${program().key}`;
-  const events = items.map((it, i) => [
+  const events = items.map(it => [
     'BEGIN:VEVENT',
-    `UID:workout-${uidScope}-${it.date.replace(/-/g, '')}-${i}@workout-app`,
+    `UID:workout-${uidScope}-${sunday.replace(/-/g, '')}-${it.key}@workout-app`,
     `DTSTAMP:${stamp}`,
     `DTSTART:${icsDateTime(it.date, it.time)}`,
     `DTEND:${icsDateTimePlusMinutes(it.date, it.time, 75)}`,
