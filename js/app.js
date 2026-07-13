@@ -475,6 +475,9 @@ function startNewBlock() {
   const context = ctx();
   context.blockStartDate = todayISO();
   context.currentWeek = 1;
+  // Otherwise a marker left over at up to 11 from the prior block blocks
+  // maybeAutoAdvanceWeek's guard for the entire new block (weeks 1-11).
+  context.autoAdvancedThroughWeek = 0;
   persist();
   render();
   toast('New block started — Week 1');
@@ -1607,9 +1610,14 @@ function icsDateTimePlusMinutes(dateISO, timeHHMM, minutes) {
 function buildWeekICS(sunday, timeHHMM) {
   const items = weekScheduleForSunday(sunday);
   const stamp = `${icsDateTime(todayISO(), '00:00')}Z`;
+  // Profile + program in the UID: without it, dad's and daughter's same-
+  // weekday events collide on date+index alone, so importing the second
+  // profile's .ics into a shared calendar replaces the first profile's
+  // event instead of adding a separate one.
+  const uidScope = `${activeProfile()}-${program().key}`;
   const events = items.map((it, i) => [
     'BEGIN:VEVENT',
-    `UID:workout-${it.date.replace(/-/g, '')}-${i}@workout-app`,
+    `UID:workout-${uidScope}-${it.date.replace(/-/g, '')}-${i}@workout-app`,
     `DTSTAMP:${stamp}`,
     `DTSTART:${icsDateTime(it.date, timeHHMM)}`,
     `DTEND:${icsDateTimePlusMinutes(it.date, timeHHMM, 75)}`,
