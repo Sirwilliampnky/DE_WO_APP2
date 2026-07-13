@@ -6,13 +6,13 @@
  * the gym with no signal. Bump CACHE_NAME (and the ?v= query strings in
  * index.html) when shipping a new version.
  */
-const CACHE_NAME = 'workout-v2-2';
+const CACHE_NAME = 'workout-v2-3';
 const APP_SHELL = [
   './',
   'index.html',
-  'css/styles.css?v=3',
-  'js/data.js?v=3',
-  'js/app.js?v=3',
+  'css/styles.css?v=4',
+  'js/data.js?v=4',
+  'js/app.js?v=4',
 ];
 
 self.addEventListener('install', event => {
