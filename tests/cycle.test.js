@@ -200,7 +200,7 @@ async function patchSession(page, key, fn) {
   const c2ua = await seed(page, { workout: 'upperA', cycle: 2, daysAgo: 6, checkin: CLEAN, sets: {
     'Barbell Bench Press': [['135', '10', '3']], 'Low-Incline DB Press': [['70', '15', '2']], 'Neutral-Grip Lat Pulldown': [['100', '6', '2'], ['100', '7', '2']] } });
   await seed(page, { workout: 'lowerA', cycle: 2, daysAgo: 5 });
-  await seed(page, { workout: 'upperB', cycle: 2, daysAgo: 4, gym: 'office', sets: { 'Neutral-Grip Lat Pulldown': [['50', '12', '2']] } });
+  const c2ub = await seed(page, { workout: 'upperB', cycle: 2, daysAgo: 4, gym: 'office', sets: { 'Neutral-Grip Lat Pulldown': [['50', '12', '2']] } });
   const c2lb = await seed(page, { workout: 'lowerB', cycle: 2, daysAgo: 3, gym: 'office', checkin: { backDuring: 'none', backNextDay: 'none' },
     sets: { 'Barbell Romanian Deadlift': [['100', '10', '2']], 'Hand-Supported Split Squat': [['70', '15', '3']] } });
   await reload(page);
@@ -217,6 +217,11 @@ async function patchSession(page, key, fn) {
   await patchSession(page, c2ua, s => { s.checkin.catchingOccurred = 'yes'; });
   check('bench: logged catching blocks any increase', /Shoulder symptoms were logged/.test(await hint(page, 'Barbell Bench Press')) && !(await hint(page, 'Barbell Bench Press')).includes('Suggested:'));
   await patchSession(page, c2ua, s => { s.checkin.catchingOccurred = 'no'; s.checkin.shoulderNextDay = 'none'; });
+  await patchSession(page, c2ub, s => { s.checkin.catchingOccurred = 'yes'; });
+  check('bench: catching logged on a LATER workout (Upper B) still blocks the increase', /in or since your last bench session/.test(await hint(page, 'Barbell Bench Press')) && !(await hint(page, 'Barbell Bench Press')).includes('Suggested:'));
+  await patchSession(page, c2ub, s => { s.checkin.catchingOccurred = ''; });
+  await patchSession(page, c1ua, s => { s.checkin.shoulderNextDay = ''; });
+  await patchSession(page, c1ua, s => { s.checkin.shoulderNextDay = 'none'; });
   check('incline at 15/15 with ≥2 RIR → heavier DBs or a switch, your call', /consider heavier DBs \(75 lb\).*won’t switch/.test(await hint(page, 'Low-Incline DB Press')));
   const pulldown = await hint(page, 'Neutral-Grip Lat Pulldown');
   check('machine history stays within the gym (YMCA pulldown ignores office 50 lb)', /Last:.*100/.test(pulldown) && !/Last:[^S]*50 ×/.test(pulldown), pulldown);
@@ -224,6 +229,13 @@ async function patchSession(page, key, fn) {
   await page.click('[data-gym="office"]');
   await settle(page);
   check('the same Upper A in office mode compares with office pulldown history', /Last:.*50 × 12/.test(await hint(page, 'Neutral-Grip Lat Pulldown')));
+  await patchSession(page, c2ua, s => { s.exercises[3].sets.forEach(set => { set.weight = '110'; set.reps = '12'; set.rir = '2'; }); });
+  await page.click('[data-gym="ymca"]');
+  await pick(page, 'Upper B');
+  const ubPulldown = await hint(page, 'Neutral-Grip Lat Pulldown');
+  check('Upper B’s 3-set pulldown progresses from Upper A’s 2-set session at the top', /All sets hit 12 at ≥2 RIR → add 5 lb/.test(ubPulldown) && ubPulldown.includes('Suggested: 115 lb'), ubPulldown);
+  await page.click('[data-gym="office"]');
+  await settle(page);
   await pick(page, 'Lower B');
   const rdl = await hint(page, 'Barbell Romanian Deadlift');
   check('RDL at the top of the range → add 5 lb', /All sets hit 10 at ≥2 RIR → add 5 lb/.test(rdl) && rdl.includes('Suggested: 105 lb'), rdl);
@@ -237,6 +249,8 @@ async function patchSession(page, key, fn) {
   await patchSession(page, c2lb, s => { s.checkin.backDuring = 'none'; });
   await seed(page, { workout: 'lowerB', cycle: 2, daysAgo: 1, sets: { 'Hand-Supported Split Squat': [['85', '10', '3']] } });
   await reload(page);
+  const overCap = await hint(page, 'Hand-Supported Split Squat');
+  check('after an 85-lb YMCA split squat, office advice names the office max — never 85', /above the office max \(71 lb\)\. Use 71 lb/.test(overCap) && !/hold 85|Hold 85/.test(overCap), overCap);
   for (const input of await exCard(page, 'Hand-Supported Split Squat').locator('[data-f$="-weight"]').all()) await input.fill('');
   await settle(page);
   await exCard(page, 'Hand-Supported Split Squat').locator('[data-rp]').click();
@@ -251,6 +265,7 @@ async function patchSession(page, key, fn) {
   await page.locator('#ciCard [data-ci$="|backDuring|some"]').click();
   await settle(page);
   check('back symptoms show the guardrail', (await page.textContent('#ciCard')).includes('Back symptoms logged'));
+  check('…and symptoms logged in the open session hold the RDL', /Back symptoms were logged/.test(await hint(page, 'Barbell Romanian Deadlift')));
   await reload(page);
   check('check-in answers persist', (await page.locator('#ciCard [data-ci$="|backDuring|some"]').getAttribute('aria-pressed')) === 'true');
   await page.locator('#ciCard [data-ci$="|backDuring|some"]').click();
@@ -335,6 +350,12 @@ async function patchSession(page, key, fn) {
   await page.click('#blockReview #bkStart');
   await settle(page);
   check('a new block starts at the deload', (await page.textContent('#wV')) === 'Deload' && (await page.textContent('#C')).includes('0/4 workouts complete'));
+  await pick(page, 'Upper A');
+  const twoDaysAgo = await page.evaluate(() => addDaysISO(todayISO(), -2));
+  await page.fill('#wDate', twoDaysAgo);
+  await page.dispatchEvent('#wDate', 'change');
+  await reload(page);
+  check('a date picked for an untouched workout survives a reload', (await page.inputValue('#wDate')) === twoDaysAgo);
   await page.click('.tab[data-tab="history"]');
   await settle(page);
   check('the finished block stays in History', await page.locator('.hi [data-open]').count() >= 28);
@@ -342,9 +363,20 @@ async function patchSession(page, key, fn) {
   await page.selectOption('#pS', 'upperLower12');
   await settle(page);
   check('the 12-week program is still on week 5', (await page.textContent('#wV')) === 'W5');
+  check('six-cycle date moves don’t change the 12-week workout date', (await page.inputValue('#wDate')) === await page.evaluate(() => todayISO()));
   await page.click('.tab[data-tab="history"]');
   await settle(page);
   check('…with its two sessions', await page.locator('.hi [data-open]').count() === 2);
+
+  section('Rest-timer auto-start across a program switch');
+  await page.evaluate(() => { delete ctx().cycleBlocks.upperLower6_20261021; persist(); });
+  await page.click('.tab[data-tab="today"]');
+  await settle(page);
+  await page.fill('[data-f="1-0-weight"]', '100');
+  await page.fill('[data-f="1-0-reps"]', '8');
+  await page.selectOption('#pS', P);
+  await page.waitForTimeout(1500);
+  check('switching to an unstarted program before auto-start fires throws nothing', errors.length === 0, errors.join(' | '));
 
   fs.rmSync(backupPath, { force: true });
   await done(browser, errors);

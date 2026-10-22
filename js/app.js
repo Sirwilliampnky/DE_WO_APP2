@@ -257,6 +257,7 @@ function normalizeSession(raw) {
     session.completedAt = isTimestamp(raw.completedAt) ? raw.completedAt : '';
     session.checkin = normalizeCheckin(raw.checkin);
     session.checkinDismissed = raw.checkinDismissed === true;
+    if (raw.dateChosen === true) session.dateChosen = true;
   }
   return session;
 }
@@ -406,7 +407,13 @@ function pruneEmptySessions(state) {
     for (const x of session.exercises || []) {
       if (Array.isArray(x.warmups)) x.warmups = x.warmups.filter(setHasEntry);
     }
-    if (!sessionHasContent(session)) delete state.sessions[key];
+    if (sessionHasContent(session)) continue;
+    // An untouched workout you deliberately dated (say, to log a missed
+    // session) keeps that date while its block is the active one.
+    const blocks = (state.profiles[session.profile] || {}).cycleBlocks || {};
+    const block = session.dateChosen && Object.prototype.hasOwnProperty.call(blocks, session.programKey) ? blocks[session.programKey] : null;
+    if (block && block.id === session.blockId) continue;
+    delete state.sessions[key];
   }
   return state;
 }
@@ -1152,6 +1159,23 @@ function plateauNote(entries) {
     ? ' Three sessions without added load or reps — check rest, sleep, symptoms and execution before changing anything.' : '';
 }
 
+/* A history entry's own planned working sets — Upper A and Upper B share the
+ * pulldown's history but plan 2 and 3 sets, so "every set at the top" is
+ * judged against the session it came from. */
+function plannedSetsFor(entry, fallback) {
+  const t = exerciseTemplate(entry.session, entry.index);
+  const p = programByKey(entry.session.programKey);
+  return t && p ? targetSets(t, p, entry.session.week) : fallback;
+}
+/* Symptom precedence: symptoms for a region logged in ANY session of this
+ * program on or after `sinceDate` — another workout, a lift that was racked
+ * and left blank, or the open session itself — hold that region's lifts. */
+function symptomsSince(region, sinceDate, session) {
+  if (!region) return false;
+  return Object.values(state.sessions).some(s => s.profile === session.profile && s.programKey === session.programKey
+    && (s.date || '') >= sinceDate && symptomFlag(region, s.checkin));
+}
+
 /* Flat bench: both working sets at 10+ reps with logged RIR ≥ 3, and the
  * shoulder explicitly clear during training, later that day AND the next
  * morning. Unknown counts as not-yet-qualified. Symptoms are checked first. */
@@ -1167,19 +1191,20 @@ function benchQualifies(entry, t) {
   if (c.shoulderDuring !== 'none' || c.shoulderLaterSameDay !== 'none' || c.shoulderNextDay !== 'none') return { ok: false, reason: 'checkinMissing' };
   return { ok: true, reason: '' };
 }
-function benchSuggestion(t, entries) {
+function benchSuggestion(t, entries, session) {
   const e0 = entries[0], e1 = entries[1];
   const sets = workingSetsOf(e0.exercise);
   const w = commonWeight(sets);
   const limits = ' Two working sets max · 8–10 reps · no back-off sets.';
   if (!w) return { value: '', tone: 'info', label: 'No load logged last time — calibrate from easy warm-ups.' };
   const q0 = benchQualifies(e0, t);
-  if (q0.reason === 'symptoms') {
-    return { value: '', tone: 'stop', label: 'Shoulder symptoms were logged after the last bench session — no increase. Hold or reduce, stop and rack if catching recurs, and arrange a routine sports-physio assessment before any heavier bench work.' };
+  if (q0.reason === 'symptoms' || symptomsSince('shoulder', e0.session.date, session)) {
+    return { value: '', tone: 'stop', label: 'Shoulder symptoms were logged in or since your last bench session — no increase. Hold or reduce, stop and rack if catching recurs, and arrange a routine sports-physio assessment before any heavier bench work.' };
   }
   if (q0.ok) {
     const q1 = e1 ? benchQualifies(e1, t) : null;
-    if (q1 && q1.ok && commonWeight(workingSetsOf(e1.exercise)) === w) {
+    // A flare anywhere between the two bench sessions breaks the streak.
+    if (q1 && q1.ok && commonWeight(workingSetsOf(e1.exercise)) === w && !symptomsSince('shoulder', e1.session.date, session)) {
       return { value: roundLoad(w + 5), tone: 'up', label: `Two clean sessions in a row at ${w} lb (10/10 at 3 RIR, shoulder clear) → add 5 lb.${limits}` };
     }
     return { value: w, tone: 'hold', label: `1 of 2 clean sessions at ${w} lb — repeat it; an increase needs one more clean session in a row.${limits}` };
@@ -1203,19 +1228,26 @@ function doubleProgression(x, t, session, entries, conv) {
   if (!w) return { value: '', tone: 'info', label: 'No load logged last time — calibrate from easy warm-ups.' };
   const inc = incrementFor(conv, t);
   const cap = officeCapFor(session, conv);
+  const side = t.perSide ? `/${t.perSide}` : '';
+  // Symptoms first — they override every load and rep target.
+  if (symptomsSince(t.symptom, e.session.date, session)) {
+    const hold = cap && w > cap ? cap : w;
+    return { value: hold, tone: 'stop', label: `${t.symptom === 'back' ? 'Back' : 'Shoulder'} symptoms were logged in or since your last session of this lift — hold ${hold} lb or go lighter; never progress through pain.` };
+  }
+  // A heavier YMCA load can't carry into the office (no 85-lb split squat).
+  if (cap && w > cap) {
+    return { value: cap, tone: 'hold', label: `Last time was ${w} lb — above the office max (${cap} lb). Use ${cap} lb here and build reps${t.officeCeiling ? ` (up to ${t.officeCeiling.repsMax}${side})` : ` toward ${t.repsMax}${side}`}.` };
+  }
   const ceiling = t.officeCeiling && session.gymMode === 'office' && w >= t.officeCeiling.lb ? t.officeCeiling.repsMax : 0;
   const repsMax = Math.max(t.repsMax, ceiling);
-  const side = t.perSide ? `/${t.perSide}` : '';
   const plateau = plateauNote(entries);
-  if (symptomFlag(t.symptom, e.session.checkin)) {
-    return { value: w, tone: 'stop', label: `${t.symptom === 'back' ? 'Back' : 'Shoulder'} symptoms were logged last time — hold ${w} lb or go lighter; never progress through pain.` };
-  }
   const first = Number(sets[0]?.reps) || 0;
   if (first && first < t.repsMin) {
     return { value: reducedLoad(w, inc), tone: 'down', label: `First set fell below ${t.repsMin} reps — reduce about 5–10% and don’t grind.` };
   }
-  const work = sets.slice(0, t.sets);
-  const allTop = sets.length >= t.sets && work.every(s => Number(s.reps) >= repsMax);
+  const planned = plannedSetsFor(e, t.sets);
+  const work = sets.slice(0, planned);
+  const allTop = sets.length >= planned && work.every(s => Number(s.reps) >= repsMax);
   const rirs = work.map(s => String(s.rir).trim() === '' ? null : Number(s.rir));
   const rirLow = rirs.some(r => r !== null && r < t.rirMin);
   const rirUnknown = rirs.some(r => r === null);
@@ -1233,7 +1265,7 @@ function doubleProgression(x, t, session, entries, conv) {
     return { value: target, tone: 'up', label: `All sets hit ${repsMax}${side} at ≥${t.rirMin} RIR → add ${incrementLabel(conv, inc)}.${rirUnknown ? ' (RIR wasn’t logged on every set — only add load if each set really had that much in reserve.)' : ''}` };
   }
   if (allTop && rirLow) return { value: w, tone: 'hold', label: `Reps are there but RIR dipped under ${t.rirMin} — hold ${w} lb until it’s comfortable.${plateau}` };
-  if (sets.slice(1, t.sets).some(s => Number(s.reps) < t.repsMin)) {
+  if (sets.slice(1, planned).some(s => Number(s.reps) < t.repsMin)) {
     return { value: w, tone: 'hold', label: `Later sets dropped below ${t.repsMin} — take the full ${formatSeconds(t.rest)} rest; lower the load only if it happens again.${plateau}` };
   }
   if (ceiling) return { value: w, tone: 'hold', label: `At the office load ceiling — hold ${w} lb and build toward ${repsMax}${side}.${plateau}` };
@@ -1254,7 +1286,7 @@ function cycleSuggestion(x, t, session) {
   if (!entries.length) {
     return { value: '', tone: 'info', calibrating: true, label: `Calibrate: choose a load from easy warm-ups for ${tg.repsMin}–${tg.repsMax} clean reps at ${rirText(tg)} RIR. The RIR target beats any suggested number.` };
   }
-  const s = t.progression === 'benchTwoSession' && x.actualName === t.name ? benchSuggestion(t, entries) : doubleProgression(x, t, session, entries, conv);
+  const s = t.progression === 'benchTwoSession' && x.actualName === t.name ? benchSuggestion(t, entries, session) : doubleProgression(x, t, session, entries, conv);
   const cap = officeCapFor(session, conv);
   if (cap && s.value !== '' && s.value > cap) s.value = cap;
   return s;
@@ -2311,7 +2343,10 @@ function changeSessionDate(newDate) {
   if (!isISODate(newDate)) { toast('Invalid date'); return; }
   const session = currentSession();
   if (!session) return;
-  if (session.date === newDate) { ctx().activeDate = newDate; persist(); render(); return; }
+  // Cycle programs date each workout's own session; ctx().activeDate is the
+  // week-based programs' working date and must not be moved from here.
+  const cycle = isCycleProgram(programByKey(session.programKey));
+  if (session.date === newDate) { if (!cycle) ctx().activeDate = newDate; persist(); render(); return; }
   const targetKey = sessionKey(session.profile, newDate, session.week, session.programKey, session.workoutKey, session.blockId);
   const target = state.sessions[targetKey];
   const sourceHasData = sessionHasContent(session);
@@ -2325,11 +2360,11 @@ function changeSessionDate(newDate) {
     moved.date = newDate;
     moved.key = targetKey;
     // Cycle programs: a deliberately dated shell isn't re-dated to today.
-    if (isCycleProgram(programByKey(session.programKey))) moved.dateChosen = true;
+    if (cycle) moved.dateChosen = true;
     state.sessions[targetKey] = moved;
   }
   if (ctx().pinnedSessionKey === session.key) ctx().pinnedSessionKey = state.sessions[targetKey] ? targetKey : '';
-  ctx().activeDate = newDate;
+  if (!cycle) ctx().activeDate = newDate;
   persist();
   render();
   toast('Workout date set');
@@ -2711,14 +2746,16 @@ function updateTimerUI() {
 function maybeAutoStartRest(exerciseIndex, setIndex, input) {
   if (!timerPref('autoStart')) return;
   const scheduledFor = currentSession();
-  if (scheduledFor.date !== todayISO()) return;
+  if (!scheduledFor || scheduledFor.date !== todayISO()) return;
   if (restTimer.running || restTimer.pausedRemaining > 0) return;
   const timerBtn = input.closest('.ex')?.querySelector('[data-rt]');
   if (!timerBtn) return;
   clearTimeout(pendingAutoStart);
   pendingAutoStart = setTimeout(() => {
+    // The user may have switched workouts — or to a program with no
+    // started block (no session at all) — in the meantime.
     const session = currentSession();
-    if (session.key !== scheduledFor.key) return; // user switched workouts meanwhile
+    if (!session || session.key !== scheduledFor.key) return;
     const set = session.exercises[exerciseIndex]?.sets[setIndex];
     if (!set || !setComplete(set)) return;
     if (restTimer.running || restTimer.pausedRemaining > 0) return;
