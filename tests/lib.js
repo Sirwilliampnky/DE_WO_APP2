@@ -3,7 +3,6 @@
  *   NODE_PATH=$(npm root -g) node tests/cycle.test.js http://127.0.0.1:8000/
  */
 'use strict';
-const { chromium } = require('playwright');
 
 let failures = 0, passes = 0;
 function check(name, cond, extra) {
@@ -13,6 +12,7 @@ function check(name, cond, extra) {
 function section(title) { console.log(`— ${title} —`); }
 
 async function launch() {
+  const { chromium } = require('playwright'); // loaded here so tests/sw.test.js runs with plain Node
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   const page = await browser.newPage({ viewport: { width: 420, height: 900 }, acceptDownloads: true });
   const errors = [];
@@ -42,20 +42,31 @@ async function reload(page) {
   await settle(page);
 }
 
-/* Fill every working set of the open workout. */
+/* Leave the focused field, as tapping elsewhere or the keyboard's Done does
+ * (fires change/focusout — when a finished workout is acted on). */
+async function leaveField(page) {
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await page.evaluate(() => new Promise(r => setTimeout(r, 0)));
+  await settle(page);
+}
+
+/* Fill every working set of the open workout, then leave the last field. */
 async function fillAllSets(page, weight = '100', reps = '10') {
   const fields = await page.locator('[data-f$="-weight"]').count();
   for (let i = 0; i < fields; i++) {
     await page.locator('[data-f$="-weight"]').nth(i).fill(weight);
     await page.locator('[data-f$="-reps"]').nth(i).fill(reps);
   }
-  await settle(page);
+  await leaveField(page);
 }
 
+function finish() {
+  console.log(failures === 0 ? `\nALL ${passes} CHECKS PASSED` : `\n${failures} CHECK(S) FAILED (${passes} passed)`);
+  process.exit(failures === 0 ? 0 : 1);
+}
 function done(browser, errors) {
   check('no page errors during the run', errors.length === 0, errors.join(' | '));
-  console.log(failures === 0 ? `\nALL ${passes} CHECKS PASSED` : `\n${failures} CHECK(S) FAILED (${passes} passed)`);
-  return browser.close().then(() => process.exit(failures === 0 ? 0 : 1));
+  return browser.close().then(finish);
 }
 
-module.exports = { check, section, launch, settle, fresh, reload, fillAllSets, done };
+module.exports = { check, section, launch, settle, fresh, reload, fillAllSets, leaveField, done, finish };

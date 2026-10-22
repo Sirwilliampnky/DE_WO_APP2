@@ -105,6 +105,7 @@
     .sets{padding:0 10px 12px}
     .sr{display:grid;grid-template-columns:40px 1fr 1fr 1fr;gap:6px;align-items:end;padding:8px 6px;margin-bottom:6px;background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.03);border-radius:var(--Rs);transition:background .2s,border-color .2s}
     .sr.dn{background:rgba(74,222,128,.06);border-color:rgba(74,222,128,.15)}
+    .sr.inv{background:rgba(251,113,133,.06);border-color:rgba(251,113,133,.45)}
     .sn{width:40px;height:48px;display:flex;align-items:center;justify-content:center;font-family:var(--m);font-size:14px;font-weight:700;color:var(--t3);background:rgba(255,255,255,.03);border-radius:var(--Rx)}
     .sr.dn .sn{color:var(--gn)}
     .sf label{display:block;font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px;font-weight:600}
@@ -126,6 +127,14 @@
     .bn{padding:10px 14px;border-radius:var(--Rs);font-size:13px;margin-bottom:10px}
     .bn-w{background:var(--amB);border:1px solid rgba(251,191,36,.2);color:#fde68a}
     .bn-i{background:var(--gnB);border:1px solid rgba(74,222,128,.18);color:#bbf7d0}
+    /* Data-safety notices: sit above everything, including the profile gate */
+    .sys-bn{position:relative;z-index:110;padding:calc(12px + env(safe-area-inset-top,0px)) 16px 12px;background:#2a1d05;border-bottom:1px solid rgba(251,191,36,.35);color:#fde68a;font-size:13px;line-height:1.45}
+    .sys-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+    .sys-acts button{padding:8px 10px;border-radius:8px;border:1px solid rgba(251,191,36,.35);background:rgba(251,191,36,.1);color:#fde68a;font-size:12px;font-weight:700}
+    .sys-block{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(5,8,15,.92)}
+    .sys-card{max-width:380px;padding:20px;border-radius:var(--R);background:var(--bg);border:1px solid var(--bdr);color:var(--t1);text-align:center}
+    .sys-card h2{font-size:18px;margin-bottom:8px}
+    .sys-card p{font-size:14px;color:var(--t2);margin-bottom:16px;line-height:1.45}
 
     /* History */
     .hi{padding:12px;border-radius:var(--Rs);background:rgba(255,255,255,.02);border:1px solid var(--bdr);margin-bottom:8px}

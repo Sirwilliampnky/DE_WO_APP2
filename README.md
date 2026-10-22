@@ -32,7 +32,9 @@ no npm.
 
 Scripts are classic `<script>` tags (no ES modules) so the app also works
 when opened from disk. When shipping a change, bump the `?v=` query strings
-in `index.html` and the `CACHE_NAME` in `sw.js` so clients pick it up.
+in `index.html` and the `VERSION` (plus its `APP_SHELL` URLs) in `sw.js` so
+clients pick it up. The worker's caches are named by its scope, and it only
+ever deletes its own — other apps on the same origin keep theirs.
 
 ## How progress works (two states)
 
@@ -41,12 +43,20 @@ save button:
 
 - **In progress** — any weight/reps/RIR value has been entered.
 - **Done** — *every* planned exercise is complete. An exercise is complete
-  when all of its sets have reps and a weight (**enter `0` for bodyweight
-  movements**). RIR/RPE is never required.
+  when all of its sets have a whole number of reps and a weight of 0 or more
+  (**enter `0` for bodyweight movements**). Negative, non-numeric or
+  fractional-rep entries never count; their row is outlined in red. RIR/RPE
+  is never required to finish — but a load increase is only suggested when
+  every planned set reached the top of the range with the effort logged
+  (RIR at or above the target, RPE at or under the max).
 
 Workout cards show a progress ring with `X/N exercises`. Everything
 autosaves as you type; sessions appear on the History tab immediately and
-can be reopened or deleted there.
+can be reopened or deleted there. Finishing a workout (and any week
+advance) happens once you leave the last field, never mid-number.
+*Repeat* and *Suggest* only fill blank weights. History follows the movement
+you actually did: a substitute keeps its own history, and in the 12-week
+program each gym keeps its own.
 
 ## The six-cycle program
 
@@ -99,19 +109,38 @@ keys are left untouched.
 regularly — iOS can purge site storage under pressure. Import accepts both
 v2 backups and backups from the old single-file version.
 
+Safeguards:
+
+- **Import** checks the whole backup first and only replaces your data once
+  it has been saved; if saving fails, nothing changes and you're told so.
+- **Two tabs open?** A tab picks up saves made in another tab. If it had
+  unsaved changes of its own at that moment, it stops saving and asks you to
+  reload — it never overwrites the other tab's work with older data.
+- **Unreadable saved data** is never overwritten. It's copied aside
+  (`workout_v10_damaged_…`), a banner explains what happened, and nothing is
+  saved until you choose: download the damaged copy, import a backup, or
+  continue with what loaded.
+
 ## Tests
 
-Two headless-Chromium suites (they need [Playwright](https://playwright.dev)
-with a Chromium build; nothing is installed into the app itself):
+Three headless-Chromium suites (they need [Playwright](https://playwright.dev)
+with a Chromium build; nothing is installed into the app itself) and one
+plain-Node suite for the service worker:
 
 ```sh
 python3 -m http.server 8931          # in the repo root, in another terminal
 NODE_PATH=$(npm root -g) node tests/regression.test.js http://127.0.0.1:8931/
 NODE_PATH=$(npm root -g) node tests/cycle.test.js http://127.0.0.1:8931/
+NODE_PATH=$(npm root -g) node tests/review.test.js http://127.0.0.1:8931/
+node tests/sw.test.js
 ```
 
 `regression.test.js` covers the week-based programs (status rules,
 persistence, history, gym toggle, profile isolation, legacy migration,
 blocks, auto-advance, the Sunday review and calendar export);
-`cycle.test.js` covers the six-cycle program end to end. Set
+`cycle.test.js` covers the six-cycle program end to end; `review.test.js`
+covers the data-safety and entry rules above (substitutions, two tabs,
+imports, recovery, completion timing, Repeat/Suggest, progression, numeric
+validation); `sw.test.js` runs the service worker's cache handling against
+an in-memory Cache Storage. Set
 `CHROMIUM_PATH` to use a specific Chromium binary.

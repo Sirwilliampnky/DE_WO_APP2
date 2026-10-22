@@ -101,6 +101,11 @@ function roundLoad(v) { return Number.isInteger(v) ? v : Math.round(v * 2) / 2; 
 /* ═══ 2. State, migration, persistence ═══ */
 
 function defaultTimerPrefs() { return { sound: true, vibrate: true, notify: false, autoStart: true }; }
+function normalizeTimerPrefs(raw) {
+  const prefs = defaultTimerPrefs();
+  if (raw && typeof raw === 'object') for (const k of Object.keys(prefs)) if (typeof raw[k] === 'boolean') prefs[k] = raw[k];
+  return prefs;
+}
 function defaultProfileContext(profileKey) {
   return {
     currentWeek: 1,
@@ -203,6 +208,20 @@ function normalizeSet(raw) {
   return { weight: String(raw?.weight ?? ''), reps: String(raw?.reps ?? ''), rir: String(raw?.rir ?? '') };
 }
 function normalizeWarmup(raw) { return { weight: String(raw?.weight ?? ''), reps: String(raw?.reps ?? '') }; }
+function normalizeExercise(x, strict) {
+  const ex = {
+    originalName: String(x?.originalName ?? x?.actualName ?? ''),
+    actualName: String(x?.actualName ?? x?.originalName ?? ''),
+    sets: Array.isArray(x?.sets) ? x.sets.map(normalizeSet) : [],
+  };
+  if (strict) {
+    ex.warmups = Array.isArray(x?.warmups) ? x.warmups.slice(0, 8).map(normalizeWarmup) : [];
+    ex.equipmentId = String(x?.equipmentId ?? '').trim().slice(0, 40);
+    ex.variantId = /^[a-z0-9_]{1,60}$/.test(String(x?.variantId || '')) ? x.variantId : '';
+    ex.convention = Object.prototype.hasOwnProperty.call(CONVENTION_LABELS, x?.convention) ? x.convention : '';
+  }
+  return ex;
+}
 function emptyCheckin() { return Object.fromEntries(Object.keys(CHECKIN_FIELDS).map(k => [k, ''])); }
 function normalizeCheckin(raw) {
   const out = emptyCheckin();
@@ -237,21 +256,10 @@ function normalizeSession(raw) {
     gymMode: normalizeGymMode(raw.gymMode || (baseWorkoutKey(workoutKey) !== workoutKey ? 'office' : 'ymca')),
     notes: typeof raw.notes === 'string' ? raw.notes : '',
     updatedAt: raw.updatedAt || raw.savedAt || '',
-    exercises: Array.isArray(raw.exercises) ? raw.exercises.map(x => {
-      const ex = {
-        originalName: String(x?.originalName ?? x?.actualName ?? ''),
-        actualName: String(x?.actualName ?? x?.originalName ?? ''),
-        sets: Array.isArray(x?.sets) ? x.sets.map(normalizeSet) : [],
-      };
-      if (strict) {
-        ex.warmups = Array.isArray(x?.warmups) ? x.warmups.slice(0, 8).map(normalizeWarmup) : [];
-        ex.equipmentId = String(x?.equipmentId ?? '').trim().slice(0, 40);
-        ex.variantId = /^[a-z0-9_]{1,60}$/.test(String(x?.variantId || '')) ? x.variantId : '';
-        ex.convention = Object.prototype.hasOwnProperty.call(CONVENTION_LABELS, x?.convention) ? x.convention : '';
-      }
-      return ex;
-    }) : [],
+    exercises: Array.isArray(raw.exercises) ? raw.exercises.map(x => normalizeExercise(x, strict)) : [],
   };
+  const extras = Array.isArray(raw.extraExercises) ? raw.extraExercises.map(x => normalizeExercise(x, strict)).filter(exerciseHasEntry) : [];
+  if (extras.length) session.extraExercises = extras;
   if (cycle) {
     session.blockId = blockId;
     session.completedAt = isTimestamp(raw.completedAt) ? raw.completedAt : '';
@@ -282,6 +290,20 @@ function normalizeScheduleOverrides(raw) {
   return out;
 }
 
+/* Readiness entries: ISO-date keys, object values, the four string fields.
+ * Anything else (null, arrays, numbers) is dropped rather than carried
+ * along to crash a later lookup. */
+const METRIC_FIELDS = ['sleep', 'energy', 'soreness', 'bodyweight'];
+function normalizeMetrics(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [date, m] of Object.entries(raw)) {
+    if (!isISODate(date) || !m || typeof m !== 'object' || Array.isArray(m)) continue;
+    out[date] = Object.fromEntries(METRIC_FIELDS.map(f => [f, typeof m[f] === 'string' || typeof m[f] === 'number' ? String(m[f]) : '']));
+  }
+  return out;
+}
+
 function normalizeCycleBlocks(raw) {
   const out = {};
   if (!raw || typeof raw !== 'object') return out;
@@ -304,7 +326,7 @@ function normalizeV10(src) {
   const state = defaultState();
   if (PROFILE_INFO[src.profile]) state.profile = src.profile;
   if (TABS.includes(src.activeTab)) state.activeTab = src.activeTab;
-  state.timerPrefs = { ...defaultTimerPrefs(), ...(src.timerPrefs || {}) };
+  state.timerPrefs = normalizeTimerPrefs(src.timerPrefs);
   state.lastExportAt = isTimestamp(src.lastExportAt) ? src.lastExportAt : '';
   for (const key of Object.keys(PROFILE_INFO)) {
     const rawCtx = (src.profiles || {})[key] || {};
@@ -322,7 +344,7 @@ function normalizeV10(src) {
     context.weekReviewedFor = isISODate(context.weekReviewedFor) ? context.weekReviewedFor : '';
     context.workoutTimeOfDay = /^([01]\d|2[0-3]):[0-5]\d$/.test(context.workoutTimeOfDay || '') ? context.workoutTimeOfDay : '17:00';
     context.workoutScheduleOverrides = normalizeScheduleOverrides(rawCtx.workoutScheduleOverrides);
-    context.metricsByDate = rawCtx.metricsByDate && typeof rawCtx.metricsByDate === 'object' ? deepClone(rawCtx.metricsByDate) : {};
+    context.metricsByDate = normalizeMetrics(rawCtx.metricsByDate);
     state.profiles[key] = context;
   }
   for (const rawSession of Object.values(src.sessions || {})) {
@@ -337,19 +359,18 @@ function migrateLegacy(src) {
   const state = defaultState();
   if (PROFILE_INFO[src.profile]) state.profile = src.profile;
   if (TABS.includes(src.activeTab)) state.activeTab = src.activeTab;
-  state.timerPrefs = { ...defaultTimerPrefs(), ...(src.timerPrefs || {}) };
+  state.timerPrefs = normalizeTimerPrefs(src.timerPrefs);
   // Legacy state was global; week/date/gym go to both profiles, and metrics
   // can't be attributed to a person retroactively, so both keep a copy.
   const week = clampWeek(src.currentWeek);
   const date = isISODate(src.activeWorkoutDate) ? src.activeWorkoutDate : '';
   const gym = normalizeGymMode(src.gymMode);
-  const metrics = src.metricsByDate && typeof src.metricsByDate === 'object' ? src.metricsByDate : {};
   for (const key of Object.keys(PROFILE_INFO)) {
     const context = state.profiles[key];
     context.currentWeek = week;
     context.activeDate = date;
     context.gymMode = gym;
-    context.metricsByDate = deepClone(metrics);
+    context.metricsByDate = normalizeMetrics(src.metricsByDate);
   }
   if (state.profile && PROGRAMS[src.selectedProgramKey]) {
     state.profiles[state.profile].selectedProgramKey = src.selectedProgramKey;
@@ -384,18 +405,68 @@ function migrateLegacy(src) {
   return state;
 }
 
+/* ── Loading and saving ──
+ * Three safeguards around the single saved value (STORAGE_KEY):
+ *  · Damaged data is never overwritten silently. If the saved state exists
+ *    but can't be read, its raw text is copied aside (QUARANTINE_PREFIX)
+ *    and `recovery` is set: nothing is written to STORAGE_KEY until the
+ *    user picks a way forward from the recovery banner.
+ *  · One writer at a time. lastSyncedRaw is the exact text this tab last
+ *    read or wrote. When another tab or window saves, this one adopts that
+ *    data if it has nothing unsaved — otherwise it stops saving and asks
+ *    for a reload, rather than replacing that work with an older snapshot.
+ *  · Replacing everything (import, Clear all) only takes effect once it's
+ *    durably saved — see commitState.
+ */
+const QUARANTINE_PREFIX = 'workout_v10_damaged_';
+let recovery = null;      // { raw, savedAs, source } while blocked on damaged data
+let lastSyncedRaw = null;
+let staleTab = false;
+
+function isPlainObject(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+/* A saved state or backup file: JSON whose payload (or export wrapper's
+ * `data`) is workout data. Throws otherwise — valid JSON that isn't ours
+ * (null, a list, another app's object) must never load as an empty app. */
+function parseStateText(text) {
+  const parsed = JSON.parse(text);
+  const src = isPlainObject(parsed) && isPlainObject(parsed.data) ? parsed.data : parsed;
+  if (!isPlainObject(src) || !(isPlainObject(src.sessions) || Array.isArray(src.logs) || isPlainObject(src.drafts))) {
+    throw new Error('not workout data');
+  }
+  return { parsed, state: pruneEmptySessions(migrateAny(parsed)) };
+}
+
 function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return pruneEmptySessions(migrateAny(JSON.parse(raw)));
-  } catch (e) { /* fall through to legacy keys */ }
+  let raw = null;
+  try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { /* storage unavailable — nothing to protect */ }
+  lastSyncedRaw = raw;
+  if (raw) {
+    try { return parseStateText(raw).state; } catch (e) { recovery = { raw, savedAs: quarantineDamaged(raw), source: '' }; }
+  }
   for (const key of LEGACY_KEYS) {
     try {
-      const raw = localStorage.getItem(key);
-      if (raw) return pruneEmptySessions(migrateAny(JSON.parse(raw)));
+      const legacy = localStorage.getItem(key);
+      if (!legacy) continue;
+      const loaded = pruneEmptySessions(migrateAny(JSON.parse(legacy)));
+      if (recovery) recovery.source = key;
+      return loaded;
     } catch (e) { /* try the next key */ }
   }
   return defaultState();
+}
+/* Copies an unreadable saved state aside (once per distinct value), so it
+ * survives whatever happens next. '' when storage refuses the copy — the
+ * original then stays where it is, untouched, under STORAGE_KEY. */
+function quarantineDamaged(raw) {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(QUARANTINE_PREFIX) && localStorage.getItem(k) === raw) return k;
+    }
+    const k = `${QUARANTINE_PREFIX}${new Date().toISOString().replace(/[:.]/g, '-')}`;
+    localStorage.setItem(k, raw);
+    return k;
+  } catch (e) { return ''; }
 }
 /* Sessions created by merely browsing are dropped at load so they don't
  * accumulate forever. Anything the user actually did — entries, notes, an
@@ -424,8 +495,14 @@ let persistTimer = null;
 let lastSaveErrorToast = 0;
 
 function persist() {
+  if (recovery || staleTab) return false;
+  let stored = lastSyncedRaw;
+  try { stored = localStorage.getItem(STORAGE_KEY); } catch (e) { /* the write below reports it */ }
+  if (stored !== lastSyncedRaw) { blockStaleTab(); return false; }
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const text = JSON.stringify(state);
+    localStorage.setItem(STORAGE_KEY, text);
+    lastSyncedRaw = text;
     saveError = '';
     return true;
   } catch (e) {
@@ -444,6 +521,46 @@ function persistSoon() {
 function flushPersist() {
   if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; persist(); }
 }
+/* Replace the whole state, keeping the result only if it's durably saved —
+ * otherwise the previous state stays, on screen and on disk. */
+function commitState(next) {
+  const prev = { state, recovery };
+  clearTimeout(persistTimer);
+  persistTimer = null;
+  state = next;
+  recovery = null;
+  if (persist()) return true;
+  ({ state, recovery } = prev);
+  return false;
+}
+/* Another tab or window saved. Adopt its data when this tab has nothing
+ * unsaved; otherwise stop saving here (see blockStaleTab). */
+function onExternalSave() {
+  if (staleTab) return;
+  let raw = null;
+  try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return; }
+  if (raw === lastSyncedRaw) return;
+  if (persistTimer || recovery || !raw) { blockStaleTab(); return; }
+  let incoming;
+  try { incoming = parseStateText(raw).state; } catch (e) { blockStaleTab(); return; }
+  // Which profile and tab a window shows is that window's own business.
+  incoming.profile = state.profile;
+  incoming.activeTab = state.activeTab;
+  state = incoming;
+  lastSyncedRaw = raw;
+  completionBanner = null;
+  pendingCompletion = null;
+  render();
+}
+/* Single writer: once this tab's snapshot is older than what's saved, it
+ * never writes again — the user reloads to pick up the latest data. */
+function blockStaleTab() {
+  staleTab = true;
+  clearTimeout(persistTimer);
+  persistTimer = null;
+  renderSystemNotices();
+}
+window.addEventListener('storage', e => { if (e.key === STORAGE_KEY || e.key === null) onExternalSave(); });
 window.addEventListener('pagehide', flushPersist);
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushPersist(); });
 
@@ -567,21 +684,49 @@ function newSession(profile, programKey, workoutKey, date, week, gym, blockId) {
   return session;
 }
 
+/* Which stored exercise belongs to which template slot. Each stored exercise
+ * is claimed by at most one slot, in passes from most to least certain:
+ * the slot's own name (same position first), then an older name for the
+ * slot (alias of originalName), then the movement actually performed. A
+ * substitution that happens to share an alias with ANOTHER slot (Hack Squat
+ * swapped into the leg-press slot) can therefore never be handed to that
+ * other slot as well. */
+function matchStoredExercises(templateExercises, stored, strict) {
+  const names = strict ? (n => [n]) : aliasNames;
+  const used = new Set();
+  const out = templateExercises.map(() => null);
+  const claim = (i, j) => { out[i] = stored[j]; used.add(j); };
+  templateExercises.forEach((t, i) => {
+    if (stored[i] && !used.has(i) && stored[i].originalName === t.name) { claim(i, i); return; }
+    const j = stored.findIndex((e, k) => !used.has(k) && e.originalName === t.name);
+    if (j >= 0) claim(i, j);
+  });
+  for (const field of ['originalName', 'actualName']) {
+    templateExercises.forEach((t, i) => {
+      if (out[i]) return;
+      const wanted = new Set(names(t.name));
+      const j = stored.findIndex((e, k) => !used.has(k) && wanted.has(e[field]));
+      if (j >= 0) claim(i, j);
+    });
+  }
+  return { matched: out, unmatched: stored.filter((_, k) => !used.has(k)) };
+}
+
 /* Re-align a stored session with its program template (exercise list or
  * deload set counts may have changed since it was created), preserving the
  * user's entries AND their chosen substitution (v1 reset actualName here,
  * which silently undid every substitution). Sets holding data are never
- * dropped, even when the plan now calls for fewer. */
+ * dropped, even when the plan now calls for fewer — and a logged exercise
+ * that no longer fits any slot is kept in `extraExercises` (shown in
+ * History) rather than discarded. */
 function syncSessionWithProgram(session) {
   const p = PROGRAMS[session.programKey], w = p?.workouts?.[session.workoutKey];
   if (!p || !w) return session;
   const strict = isStrictProgram(p);
-  const names = strict ? (n => [n]) : aliasNames;
-  const byName = new Map();
-  for (const e of session.exercises) {
-    for (const n of names(e.originalName)) if (n && !byName.has(n)) byName.set(n, e);
-    for (const n of names(e.actualName)) if (n && !byName.has(n)) byName.set(n, e);
-  }
+  // Previously set-aside exercises go last in the pool, so one returns to its
+  // slot if the template brings it back, but never displaces the slot's own.
+  const pool = [...(session.exercises || []), ...(session.extraExercises || [])];
+  const { matched, unmatched } = matchStoredExercises(w.exercises, pool, strict);
   const fresh = newSession(session.profile, session.programKey, session.workoutKey, session.date, session.week, session.gymMode, session.blockId);
   fresh.key = session.key;
   fresh.notes = session.notes || '';
@@ -593,8 +738,10 @@ function syncSessionWithProgram(session) {
     fresh.checkinDismissed = session.checkinDismissed === true;
     if (session.dateChosen) fresh.dateChosen = true;
   }
+  const extras = unmatched.filter(exerciseHasEntry);
+  if (extras.length) fresh.extraExercises = extras;
   fresh.exercises = fresh.exercises.map((ne, i) => {
-    const old = names(ne.originalName).map(n => byName.get(n)).find(Boolean);
+    const old = matched[i];
     if (!old) return ne;
     const oldSets = Array.isArray(old.sets) ? old.sets : [];
     let count = ne.sets.length;
@@ -633,16 +780,34 @@ function currentSession() {
 function setHasEntry(s) {
   return String(s?.weight ?? '').trim() !== '' || String(s?.reps ?? '').trim() !== '' || String(s?.rir ?? '').trim() !== '';
 }
-/* A set is complete with reps > 0 and any non-blank weight — an explicit '0'
- * counts, so bodyweight movements (pull-ups, push-up variants…) can finish. */
-function setComplete(s) {
-  return Number(s?.reps) > 0 && String(s?.weight ?? '').trim() !== '';
+/* A set is complete with a whole number of reps ≥ 1 and a finite weight
+ * ≥ 0 — an explicit '0' counts, so bodyweight movements (pull-ups, push-up
+ * variants…) can finish; -50, 'bad' or 0.5 reps never do. */
+function validWeight(v) {
+  const t = String(v ?? '').trim();
+  return t !== '' && Number.isFinite(Number(t)) && Number(t) >= 0;
+}
+function validReps(v) {
+  const t = String(v ?? '').trim();
+  return t !== '' && Number.isInteger(Number(t)) && Number(t) >= 1;
+}
+function setComplete(s) { return validReps(s?.reps) && validWeight(s?.weight); }
+/* False when a set holds a weight or rep entry that can never count — the
+ * row is outlined so it gets fixed. (0 reps is a legitimate "missed".) The
+ * effort column isn't checked: special-intensity lifts log a note there. */
+function setValuesValid(s) {
+  const w = String(s?.weight ?? '').trim(), r = String(s?.reps ?? '').trim();
+  return (w === '' || validWeight(w)) && (r === '' || r === '0' || validReps(r));
 }
 function exerciseComplete(x) { return x.sets.length > 0 && x.sets.every(setComplete); }
 /* Warm-up rows count as "started" but never toward completion, volume or
  * progression — those read `sets` (working sets) only. */
+function exerciseHasEntry(x) { return (x.sets || []).some(setHasEntry) || (x.warmups || []).some(setHasEntry); }
+/* Planned slots plus any set-aside exercise (see syncSessionWithProgram) —
+ * for read-only views of what was actually logged. */
+function loggedExercises(session) { return [...(session.exercises || []), ...(session.extraExercises || [])]; }
 function sessionHasEntry(session) {
-  return (session.exercises || []).some(x => (x.sets || []).some(setHasEntry) || (x.warmups || []).some(setHasEntry));
+  return (session.exercises || []).some(exerciseHasEntry) || (session.extraExercises || []).some(exerciseHasEntry);
 }
 function sessionHasSubstitution(session) {
   return (session.exercises || []).some(x => x.actualName && x.originalName && x.actualName !== x.originalName);
@@ -678,7 +843,7 @@ function sessionStatus(session) {
   return sessionHasEntry(session) ? 'in-progress' : 'empty';
 }
 function exerciseVolume(x) {
-  return x.sets.reduce((sum, s) => sum + ((Number(s.weight) || 0) * (Number(s.reps) || 0)), 0);
+  return x.sets.reduce((sum, s) => sum + (setComplete(s) ? Number(s.weight) * Number(s.reps) : 0), 0);
 }
 
 function currentBlockStart() { return ctx().blockStartDate || ''; }
@@ -973,7 +1138,10 @@ function historyEntries(name, excludeKey, opts = {}) {
     if (opts.completedOnly && !session.completedAt) continue;
     if (opts.excludeDeload && isCycleProgram(p) && session.week === 0) continue;
     session.exercises.forEach((x, i) => {
-      if (strict ? x.actualName !== name : (!names.has(x.actualName) && !names.has(x.originalName))) return;
+      // The movement actually performed — never the slot it filled, so a DB
+      // glute bridge done in the barbell hip-thrust slot is never compared
+      // with barbell loads (or the other way round).
+      if (strict ? x.actualName !== name : !names.has(x.actualName)) return;
       const theirMachine = String(x.equipmentId || '').trim().toLowerCase();
       if (wantMachine && theirMachine !== wantMachine) return;
       // Skip exercises with no performance data, or a newer partial session
@@ -987,11 +1155,15 @@ function historyEntries(name, excludeKey, opts = {}) {
     (b.session.date || '').localeCompare(a.session.date || '') ||
     (b.session.updatedAt || '').localeCompare(a.session.updatedAt || ''));
 }
-function lastPerformance(actualName, originalName, excludeKey) {
-  const byActual = historyEntries(actualName, excludeKey);
-  if (byActual.length) return byActual[0];
-  const byOriginal = historyEntries(originalName, excludeKey);
-  return byOriginal.length ? byOriginal[0] : null;
+/* Week-based programs: history of the movement actually performed (alias
+ * table included) and, in a program used at two gyms, only that gym's
+ * sessions — the equipment differs. There is deliberately no fallback to the
+ * slot's original exercise: a substitute with no history calibrates fresh. */
+function movementOpts(session) {
+  return hasGymToggle(programByKey(session.programKey)) ? { gym: session.gymMode } : {};
+}
+function lastPerformance(x, session) {
+  return historyEntries(x.actualName, session.key, movementOpts(session))[0] || null;
 }
 /* "Comparable" for a strict program = same variant name, and for machine
  * conventions also the same gym and (if named) the same machine. */
@@ -1009,14 +1181,12 @@ function comparableHistory(x, session, extra = {}) {
  * (a deload is never a regression) unless they're all there is. */
 function lastFor(x, session) {
   const p = programByKey(session.programKey);
-  if (!isStrictProgram(p)) return lastPerformance(x.actualName, x.originalName, session.key);
+  if (!isStrictProgram(p)) return lastPerformance(x, session);
   const all = comparableHistory(x, session);
   if (isCycleProgram(p) && session.week > 0) return all.find(e => e.session.week !== 0) || all[0] || null;
   return all[0] || null;
 }
-function workingSetsOf(exercise) {
-  return (exercise.sets || []).filter(s => Number(s.reps) > 0 && String(s.weight ?? '').trim() !== '');
-}
+function workingSetsOf(exercise) { return (exercise.sets || []).filter(setComplete); }
 
 function formatSets(sets) {
   const entered = sets.filter(s => Number(s.weight) > 0 || Number(s.reps) > 0);
@@ -1046,32 +1216,38 @@ function intensityPlaceholder(t) {
     : String(t.rirTarget);
 }
 
-/* Double-progression check: did the last performance hit the top of the rep
- * range at (or under) the target intensity on every completed set? */
-function metProgressionTarget(sets, t) {
-  const valid = sets.filter(s => Number(s.weight) > 0 && Number(s.reps) > 0);
-  if (!valid.length || !valid.every(s => Number(s.reps) >= t.repsMax)) return false;
-  if (t.intensityType === 'rpe') {
-    const efforts = valid.map(s => Number(s.rir)).filter(x => x > 0);
-    return !efforts.length || (efforts.reduce((a, b) => a + b, 0) / efforts.length) <= t.intensityMax;
-  }
-  if (t.intensityType === 'special') return true;
-  const efforts = valid.map(s => Number(s.rir)).filter(x => x >= 0);
-  const avg = efforts.length ? efforts.reduce((a, b) => a + b, 0) / efforts.length : t.rirTarget;
-  return avg <= (t.rirTarget + 0.5);
+/* Double-progression check on the last performance. Met only when every
+ * PLANNED set was done (weight and whole reps logged), every one reached the
+ * top of the rep range, and the effort is confirmed on each: RIR at or above
+ * the target (more in reserve = easier) or RPE at or under the max (higher
+ * RPE = harder). 'unknown' = top reps everywhere but effort not logged on
+ * every set — never treated as met. */
+function progressionCheck(sets, t, planned) {
+  const done = sets.filter(setComplete);
+  if (!planned || done.length < planned) return 'no';
+  const work = done.slice(0, planned);
+  if (!work.every(s => Number(s.reps) >= t.repsMax)) return 'no';
+  if (t.intensityType === 'special') return 'yes';
+  const efforts = work.map(s => (String(s.rir ?? '').trim() === '' || !Number.isFinite(Number(s.rir)) ? null : Number(s.rir)));
+  const short = t.intensityType === 'rpe'
+    ? efforts.some(e => e !== null && e > t.intensityMax)
+    : efforts.some(e => e !== null && e < t.rirTarget);
+  if (short) return 'no';
+  return efforts.some(e => e === null) ? 'unknown' : 'yes';
 }
 
-function suggestLoad(exercise, t, excludeKey) {
+function suggestLoad(x, t, session) {
   if (!t) return { value: '', label: '' };
-  const last = lastPerformance(exercise.actualName, exercise.originalName, excludeKey);
+  const last = lastPerformance(x, session);
   if (!last) return { value: '', label: 'No prior data' };
-  const prevSets = last.exercise.sets;
-  const base = commonWeight(prevSets);
+  const base = commonWeight(last.exercise.sets);
   if (!base) return { value: '', label: 'No load last time' };
-  const completed = prevSets.filter(s => Number(s.weight) > 0 && Number(s.reps) > 0);
-  const bump = metProgressionTarget(completed, t);
-  const value = bump ? roundLoad(base + (t.step || 5)) : base;
-  let label = bump ? `Met target → +${t.step || 5}` : 'Repeat load, beat reps';
+  const check = progressionCheck(last.exercise.sets, t, plannedSetsFor(last, t.sets));
+  const step = t.step || 5;
+  const value = check === 'yes' ? roundLoad(base + step) : base;
+  let label = check === 'yes' ? `Met target → +${step}`
+    : check === 'unknown' ? `Top reps hit — log ${intensityLabel(t)} on every set to confirm a load increase`
+    : 'Repeat load, beat reps';
   if (t.intensityType === 'special' && t.intensityHint) label += ` · ${t.intensityHint}`;
   return { value, label };
 }
@@ -1254,6 +1430,9 @@ function doubleProgression(x, t, session, entries, conv, rirMin) {
   const rirs = work.map(s => String(s.rir).trim() === '' ? null : Number(s.rir));
   const rirLow = rirs.some(r => r !== null && r < rirMin);
   const rirUnknown = rirs.some(r => r === null);
+  if (allTop && !rirLow && rirUnknown) {
+    return { value: w, tone: 'hold', label: `Reps are there — log RIR on every set to confirm ≥${rirMin} before adding load. Hold ${w} lb.${plateau}` };
+  }
   if (allTop && !rirLow) {
     const target = roundLoad(w + inc);
     if (t.progression === 'inclineReview' && x.actualName === t.name) {
@@ -1265,7 +1444,7 @@ function doubleProgression(x, t, session, entries, conv, rirMin) {
         ? { value: w, tone: 'review', label: `${repsMax}${side} at the office max (${cap} lb) — time to reassess: progress the load at the YMCA, or hold here.` }
         : { value: w, tone: 'hold', label: `Top of the range at the office max (${cap} lb) — keep the load and build reps.` };
     }
-    return { value: target, tone: 'up', label: `All sets hit ${repsMax}${side} at ≥${rirMin} RIR → add ${incrementLabel(conv, inc)}.${rirUnknown ? ' (RIR wasn’t logged on every set — only add load if each set really had that much in reserve.)' : ''}` };
+    return { value: target, tone: 'up', label: `All sets hit ${repsMax}${side} at ≥${rirMin} RIR → add ${incrementLabel(conv, inc)}.` };
   }
   if (allTop && rirLow) return { value: w, tone: 'hold', label: `Reps are there but RIR dipped under ${rirMin} — hold ${w} lb until it’s comfortable.${plateau}` };
   if (sets.slice(1, planned).some(s => Number(s.reps) < t.repsMin)) {
@@ -1295,7 +1474,7 @@ function cycleSuggestion(x, t, session) {
   return s;
 }
 function suggestionFor(x, t, session) {
-  return isCycleProgram(programByKey(session.programKey)) ? cycleSuggestion(x, t, session) : suggestLoad(x, t, session.key);
+  return isCycleProgram(programByKey(session.programKey)) ? cycleSuggestion(x, t, session) : suggestLoad(x, t, session);
 }
 
 /* Same movement logged under an older program — shown during calibration as
@@ -1358,7 +1537,7 @@ function programStats() {
 function metricsFor(date) { return ctx().metricsByDate[date] || { sleep: '', energy: '', soreness: '', bodyweight: '' }; }
 function previousBodyweight(date) {
   const entries = Object.entries(ctx().metricsByDate)
-    .filter(([d, m]) => d < date && Number(m.bodyweight) > 0)
+    .filter(([d, m]) => d < date && m && Number(m.bodyweight) > 0)
     .sort((a, b) => a[0] < b[0] ? 1 : -1);
   return entries.length ? Number(entries[0][1].bodyweight) : 0;
 }
@@ -1397,6 +1576,7 @@ function entryWarnings(session) {
     x.sets.forEach((s, si) => {
       const w = String(s.weight ?? '').trim(), r = Number(s.reps) || 0;
       const rir = String(s.rir ?? '').trim() === '' ? null : Number(s.rir);
+      if (!setValuesValid(s)) out.push(`${x.actualName} set ${si + 1}: this entry can’t count — weight must be 0 or more and reps a whole number.`);
       if (w !== '' && Number(w) > 0 && !r) out.push(`${x.actualName} set ${si + 1}: weight entered but reps are blank.`);
       if (r > 0 && w === '') out.push(`${x.actualName} set ${si + 1}: weight is blank — enter 0 for bodyweight.`);
       if (rir !== null && rir > 6) out.push(`${x.actualName} set ${si + 1}: RIR/RPE entry looks unusually high.`);
@@ -1513,8 +1693,8 @@ function renderToday() {
   session.exercises.forEach((x, ei) => {
     const t = exerciseTemplate(session, ei);
     if (!t) return;
-    const last = lastPerformance(x.actualName, x.originalName, session.key);
-    const suggestion = suggestLoad(x, t, session.key);
+    const last = lastPerformance(x, session);
+    const suggestion = suggestLoad(x, t, session);
     const substitutions = [x.originalName, ...(p.substitutions[x.originalName] || [])];
     if (!substitutions.includes(x.actualName)) substitutions.push(x.actualName);
     const doneSets = x.sets.filter(setComplete).length;
@@ -1524,11 +1704,11 @@ function renderToday() {
       (t.note ? `<div class="ex-nt">${escapeHTML(t.note)}</div>` : '') +
       (t.intensityHint ? `<div class="ex-nt">${escapeHTML(t.intensityHint)}</div>` : '') + `</div>` +
       `<select class="ex-sb" data-sb="${ei}" aria-label="Substitute exercise">${substitutions.map(n => `<option value="${escapeHTML(n)}" ${n === x.actualName ? 'selected' : ''}>${escapeHTML(n)}</option>`).join('')}</select>` +
-      `<div class="ex-hi"><strong>${last ? 'Last:' : 'History:'}</strong> ${last ? `${escapeHTML(last.session.date)} · ${escapeHTML(formatSets(last.exercise.sets))} · W${last.session.week}` : 'No prior session.'}<br><span style="color:var(--t3)">${escapeHTML(suggestion.label)}${suggestion.value ? ` → <strong style="color:var(--ac)">${suggestion.value}</strong>` : ''}</span>${trendHTML(x.actualName)}</div>` +
+      `<div class="ex-hi"><strong>${last ? 'Last:' : 'History:'}</strong> ${last ? `${escapeHTML(last.session.date)} · ${escapeHTML(formatSets(last.exercise.sets))} · W${last.session.week}` : 'No prior session.'}<br><span style="color:var(--t3)">${escapeHTML(suggestion.label)}${suggestion.value ? ` → <strong style="color:var(--ac)">${suggestion.value}</strong>` : ''}</span>${trendHTML(x.actualName, movementOpts(session))}</div>` +
       `<div class="ex-tl"><button class="tb" data-rp="${ei}">↻ Repeat</button><button class="tb" data-sg="${ei}">↑ Suggest</button><button class="tb tb-t" data-rt="${t.rest}" data-rl="${escapeHTML(x.actualName)}">⏱ ${formatSeconds(t.rest)}</button></div>` +
       `<div class="sets">${x.sets.map((s, si) => {
         const done = setComplete(s);
-        return `<div class="sr${done ? ' dn' : ''}"><div class="sn">${si + 1}</div>` +
+        return `<div class="sr${done ? ' dn' : ''}${setValuesValid(s) ? '' : ' inv'}"><div class="sn">${si + 1}</div>` +
           `<div class="sf"><label>Weight</label><input type="number" inputmode="decimal" step="0.5" min="0" value="${escapeHTML(s.weight)}" placeholder="lb / 0" data-f="${ei}-${si}-weight"></div>` +
           `<div class="sf"><label>Reps</label><input type="number" inputmode="numeric" step="1" min="0" value="${escapeHTML(s.reps)}" placeholder="${t.repsMin}–${t.repsMax}" data-f="${ei}-${si}-reps"></div>` +
           `<div class="sf"><label>${escapeHTML(intensityLabel(t))}</label><input type="number" inputmode="decimal" step="0.5" min="0" max="10" value="${escapeHTML(s.rir)}" placeholder="${escapeHTML(intensityPlaceholder(t))}" data-f="${ei}-${si}-rir"></div></div>`;
@@ -1662,7 +1842,7 @@ function cycleExerciseCardHTML(p, session, x, ei, t) {
   }
   h += `<div class="sets-h">Working sets</div><div class="sets">${x.sets.map((s, si) => {
     const done = setComplete(s);
-    return `<div class="sr${done ? ' dn' : ''}"><div class="sn">${si + 1}</div>` +
+    return `<div class="sr${done ? ' dn' : ''}${setValuesValid(s) ? '' : ' inv'}"><div class="sn">${si + 1}</div>` +
       `<div class="sf"><label>Weight</label><input type="number" inputmode="decimal" step="0.5" min="0" value="${escapeHTML(s.weight)}" placeholder="lb / 0" data-f="${ei}-${si}-weight"></div>` +
       `<div class="sf"><label>Reps${escapeHTML(side)}</label><input type="number" inputmode="numeric" step="1" min="0" value="${escapeHTML(s.reps)}" placeholder="${tg.repsMin}–${tg.repsMax}" data-f="${ei}-${si}-reps"></div>` +
       `<div class="sf"><label>RIR</label><input type="number" inputmode="decimal" step="0.5" min="0" max="10" value="${escapeHTML(s.rir)}" placeholder="${escapeHTML(rirText(tg))}" data-f="${ei}-${si}-rir"></div></div>`;
@@ -1809,6 +1989,7 @@ function sessionCardHTML(session) {
     `<div class="hi-m">${escapeHTML(prettyDate(session.date))} · ${escapeHTML(weekLabelFor(session))} · ${session.gymMode === 'office' ? 'Office' : 'YMCA'} · ${ex.done}/${ex.total} exercises ${statusTag(status)}</div>` +
     (session.updatedAt ? `<div class="hi-m">Updated ${escapeHTML(prettyDateTime(session.updatedAt))}</div>` : '') +
     (session.notes ? `<div class="hi-s">${escapeHTML(session.notes)}</div>` : '') +
+    (session.extraExercises || []).map(x => `<div class="hi-m">Also logged (no longer in this workout): ${escapeHTML(x.actualName)} · ${escapeHTML(formatSets(x.sets))}</div>`).join('') +
     `</span></div><div class="hi-acts"><button data-open="${escapeHTML(session.key)}">Open</button><button class="red" data-del="${escapeHTML(session.key)}">Delete</button></div></div>`;
 }
 
@@ -1824,7 +2005,7 @@ function renderHistory() {
   const sessions = Object.values(state.sessions)
     .filter(s => s.profile === profile && s.programKey === p.key && sessionHasContent(s))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.updatedAt || '').localeCompare(a.updatedAt || ''));
-  const names = [...new Set(sessions.flatMap(s => s.exercises.filter(x => x.sets.some(setHasEntry)).map(x => x.actualName)))].sort();
+  const names = [...new Set(sessions.flatMap(s => loggedExercises(s).filter(x => x.sets.some(setHasEntry)).map(x => x.actualName)))].sort();
 
   let h = `<div class="card"><div class="stats"><div class="st"><strong>${stats.sessions}</strong><span>Sessions</span></div><div class="st"><strong>${stats.volume.toLocaleString()}</strong><span>Volume</span></div><div class="st"><strong>${stats.sets}</strong><span>Sets</span></div><div class="st"><strong>${names.length}</strong><span>Moves</span></div></div></div>`;
   h += `<div class="tabs" style="padding-top:0"><button class="tab ${historySubTab === 'sessions' ? 'on' : ''}" data-hsub="sessions">Sessions</button><button class="tab ${historySubTab === 'exercises' ? 'on' : ''}" data-hsub="exercises">By Exercise</button></div>`;
@@ -1853,7 +2034,7 @@ function renderHistoryByExercise(sessions, names) {
   const filter = names.includes(historyFilter) ? historyFilter : '';
   const rows = [];
   for (const s of sessions) {
-    s.exercises.forEach(x => {
+    loggedExercises(s).forEach(x => {
       if (!x.sets.some(setHasEntry)) return;
       if (filter && x.actualName !== filter) return;
       rows.push({
@@ -1869,10 +2050,11 @@ function renderHistoryByExercise(sessions, names) {
   if (filter) {
     // Machine/cable loads only trend within one gym; deloads are left out.
     const p = program();
+    // Week-based programs used at two gyms trend one gym at a time too.
     const machine = isStrictProgram(p) && MACHINE_CONVENTIONS.has(conventionForName(p, filter));
-    const opts = isStrictProgram(p) ? { excludeDeload: true, ...(machine ? { gym: gymMode() } : {}) } : {};
+    const opts = isStrictProgram(p) ? { excludeDeload: true, ...(machine ? { gym: gymMode() } : {}) } : (hasGymToggle(p) ? { gym: gymMode() } : {});
     const t = getTrend(filter, 12, opts);
-    if (t) trendBlock = `<div class="hi" style="background:rgba(99,220,255,.04);border-color:rgba(99,220,255,.12)"><div class="hi-tp"><span class="hi-n" style="color:var(--ac)">Trend${machine ? ` · ${escapeHTML(gymLabel())}` : ''}</span><span class="hi-v">${t.points[t.points.length - 1].weight} lb</span></div><div class="ex-spark" style="margin-top:4px">${sparkSVG(t.points, 120, 28)}<span class="${t.up ? 'spark-up' : t.flat ? '' : 'spark-dn'}">${t.up ? '↑' : t.flat ? '→' : '↓'} ${t.up ? '+' : ''}${t.delta} lb (${t.up ? '+' : ''}${t.pct}%) over ${t.points.length} sessions</span></div></div>`;
+    if (t) trendBlock = `<div class="hi" style="background:rgba(99,220,255,.04);border-color:rgba(99,220,255,.12)"><div class="hi-tp"><span class="hi-n" style="color:var(--ac)">Trend${opts.gym ? ` · ${escapeHTML(gymLabel())}` : ''}</span><span class="hi-v">${t.points[t.points.length - 1].weight} lb</span></div><div class="ex-spark" style="margin-top:4px">${sparkSVG(t.points, 120, 28)}<span class="${t.up ? 'spark-up' : t.flat ? '' : 'spark-dn'}">${t.up ? '↑' : t.flat ? '→' : '↓'} ${t.up ? '+' : ''}${t.delta} lb (${t.up ? '+' : ''}${t.pct}%) over ${t.points.length} sessions</span></div></div>`;
   }
   return `<div class="card"><div class="card-h"><h2>Exercise history</h2></div><span class="lbl">Filter</span><select class="sel mb12" id="hF"><option value="">All</option>${names.map(n => `<option value="${escapeHTML(n)}" ${n === filter ? 'selected' : ''}>${escapeHTML(n)}</option>`).join('')}</select>${trendBlock}` +
     (rows.length ? rows.map(r => `<div class="hi"><div class="hi-tp"><span class="hi-n">${escapeHTML(r.name)}</span><span class="hi-v">${r.volume.toLocaleString()}</span></div><div class="hi-m">${escapeHTML(prettyDate(r.date))} · ${escapeHTML(r.weekLabel)} · ${escapeHTML(r.gym)} · ${escapeHTML(r.workout)}</div>${r.name !== r.original ? `<div class="hi-m">Subbed from ${escapeHTML(r.original)}</div>` : ''}<div class="hi-s">${escapeHTML(r.summary)}${r.warmups ? ` <span class="hi-m">+ ${r.warmups} warm-up${r.warmups === 1 ? '' : 's'}</span>` : ''}</div></div>`).join('') : '<div class="hi">No exercise history yet.</div>') +
@@ -1960,6 +2142,7 @@ function render() {
   requestAnimationFrame(() => { renderQueued = false; renderNow(); });
 }
 function renderNow() {
+  renderSystemNotices();
   ensureSelection();
   const p = program();
   const workout = p.workouts[effectiveWorkoutKey(p.key, ctx().selectedWorkoutKey, ctx().gymMode)];
@@ -2264,15 +2447,44 @@ function onSetFieldInput(input) {
     const complete = setComplete(set);
     const wasComplete = row.classList.contains('dn');
     row.classList.toggle('dn', complete);
+    row.classList.toggle('inv', !setValuesValid(set));
     if (!wasComplete && complete) maybeAutoStartRest(Number(ei), Number(si), input);
   }
-  if (!wasSessionDone && sessionStatus(session) === 'done') {
-    celebrateCompletion(session);
-    persist();
-    render(); // week/header may have changed — a full render, not the light path
-    return;
-  }
+  const nowDone = sessionStatus(session) === 'done';
+  if (!wasSessionDone && nowDone) pendingCompletion = session.key;
+  else if (!nowDone && pendingCompletion === session.key) pendingCompletion = null;
   refreshEntryUI();
+}
+
+/* Finishing a workout redraws the screen (and may move the week), so it's
+ * detected while typing but only acted on once the field is committed —
+ * typing "12" in the last reps box must not redraw on the "1". It also
+ * waits out a tap in progress (the redraw would swallow its click) and
+ * stays pending while focus is in another entry field. */
+let pendingCompletion = null;
+/* Anything that redraws or reflows the screen when a field is committed runs
+ * after a tap in progress: moving or replacing content between press and
+ * release lands the release elsewhere, and the tap is lost. */
+let pointerIsDown = false;
+const afterPointer = [];
+function afterTap(fn) {
+  if (pointerIsDown) afterPointer.push(fn);
+  else fn();
+}
+function scheduleCompletionCheck() {
+  if (pendingCompletion) afterTap(() => setTimeout(finishPendingCompletion, 0));
+}
+function finishPendingCompletion(force) {
+  const key = pendingCompletion;
+  if (!key) return;
+  const active = document.activeElement;
+  if (!force && active && active.closest && active.closest('#C') && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
+  pendingCompletion = null;
+  const session = Object.prototype.hasOwnProperty.call(state.sessions, key) ? state.sessions[key] : null;
+  if (!session || sessionStatus(session) !== 'done') return;
+  celebrateCompletion(session);
+  persist();
+  renderNow(); // week/header may have changed — a full render, not the light path
 }
 
 function setSubstitution(index, name) {
@@ -2318,6 +2530,9 @@ function applyPreviousCycle(session, x, t, mode) {
   toast(`${mode === 'repeat' ? 'Repeated last loads' : 'Suggested load filled'} (${filled} set${filled === 1 ? '' : 's'})${capped ? ` — capped at the office max ${cap} lb` : ''}`);
 }
 
+/* Fills blank weights only — a logged set keeps the weight it was done
+ * with. With every weight already filled, it offers (with confirmation) to
+ * replace only the planned weights of sets that have no reps logged yet. */
 function applyPrevious(index, mode) {
   const session = currentSession();
   if (!session) return;
@@ -2325,22 +2540,28 @@ function applyPrevious(index, mode) {
   const t = exerciseTemplate(session, index);
   if (!x || !t) return;
   if (isCycleProgram(programByKey(session.programKey))) { applyPreviousCycle(session, x, t, mode); return; }
-  const last = lastPerformance(x.actualName, x.originalName, session.key);
+  const last = lastPerformance(x, session);
   if (!last) { toast('No previous data'); return; }
   const lastSets = last.exercise.sets;
-  const suggestion = suggestLoad(x, t, session.key);
-  x.sets.forEach((set, i) => {
-    if (mode === 'repeat') {
-      const prev = lastSets[i] || lastSets[lastSets.length - 1] || {};
-      if (prev.weight !== undefined && String(prev.weight) !== '') set.weight = String(prev.weight);
-    } else if (suggestion.value !== '' && suggestion.value !== undefined) {
-      set.weight = String(suggestion.value);
-    }
+  const suggestion = suggestLoad(x, t, session);
+  const values = x.sets.map((_, i) => {
+    if (mode === 'repeat') return String((lastSets[i] || lastSets[lastSets.length - 1] || {}).weight ?? '').trim();
+    return suggestion.value !== '' && suggestion.value !== undefined ? String(suggestion.value) : '';
   });
+  if (!values.some(v => validWeight(v))) { toast(mode === 'repeat' ? 'No logged weights last time' : 'No load suggestion yet'); return; }
+  const usable = i => validWeight(values[i]);
+  let targets = x.sets.map((_, i) => i).filter(i => usable(i) && String(x.sets[i].weight ?? '').trim() === '');
+  if (!targets.length) {
+    const open = x.sets.map((_, i) => i).filter(i => usable(i) && String(x.sets[i].reps ?? '').trim() === '' && x.sets[i].weight !== values[i]);
+    if (!open.length) { toast('Logged sets keep their weights — edit one directly to change it'); return; }
+    if (!confirm(`Replace the planned weight on ${open.length} set${open.length === 1 ? '' : 's'} with no reps logged yet? Logged sets keep their weights.`)) return;
+    targets = open;
+  }
+  targets.forEach(i => { x.sets[i].weight = values[i]; });
   touchSession(session);
   persist();
   render();
-  toast(mode === 'repeat' ? 'Repeated last weights' : 'Suggested loads applied');
+  toast(`${mode === 'repeat' ? 'Repeated last weights' : 'Suggested load applied'} (${targets.length} set${targets.length === 1 ? '' : 's'})`);
 }
 
 /* Date moves are merge-safe: moving onto a date that already holds entries
@@ -2455,8 +2676,9 @@ function setGym(gym) {
 
 function resetAll() {
   if (!confirm('Clear ALL data for BOTH profiles? Export a backup first if unsure.')) return;
-  state = defaultState();
-  persist();
+  if (!commitState(defaultState())) { toast('Couldn’t save — nothing was cleared'); return; }
+  completionBanner = null;
+  pendingCompletion = null;
   render();
   toast('Cleared');
 }
@@ -2464,6 +2686,24 @@ function resetAll() {
 /* ═══ 10. Events (bound once — content handlers are delegated) ═══ */
 
 function bindStaticEvents() {
+  document.addEventListener('click', e => {
+    const id = e.target.closest('button')?.id;
+    if (id === 'sysReload') location.reload();
+    else if (id === 'rcDownload') downloadDamagedCopy();
+    else if (id === 'rcImport') pickImportFile();
+    else if (id === 'rcKeep') keepRecoveredState();
+  });
+  // See afterTap: queued redraws run once the tap's click has been handled.
+  document.addEventListener('pointerdown', () => { pointerIsDown = true; }, true);
+  const pointerDone = () => {
+    pointerIsDown = false;
+    const queued = afterPointer.splice(0);
+    if (queued.length) setTimeout(() => queued.forEach(fn => fn()), 0);
+  };
+  document.addEventListener('pointerup', pointerDone, true);
+  document.addEventListener('pointercancel', pointerDone, true);
+  // Leaving the app with the last field still focused still finishes it.
+  document.addEventListener('visibilitychange', () => { if (document.hidden) finishPendingCompletion(true); });
   document.querySelectorAll('[data-pf]').forEach(b => b.addEventListener('click', () => {
     const profile = b.dataset.pf;
     if (!PROFILE_INFO[profile]) return;
@@ -2604,7 +2844,7 @@ function bindStaticEvents() {
     }
     if (t.dataset.eq !== undefined) { setEquipment(Number(t.dataset.eq), t.value); return; }
     if (t.dataset.sb !== undefined) { setSubstitution(Number(t.dataset.sb), t.value); return; }
-    if (t.dataset.f) { refreshSecondaryUI(); return; }
+    if (t.dataset.f) { afterTap(refreshSecondaryUI); return; }
     if (t.id === 'wDate') { changeSessionDate(t.value); return; }
     if (t.dataset.wrDay !== undefined) {
       const dateEl = document.querySelector(`[data-wr-date="${t.dataset.wrDay}"]`);
@@ -2614,6 +2854,8 @@ function bindStaticEvents() {
     if (t.id === 'hF') { historyFilter = t.value; render(); return; }
     if (t.id === 'sI') { const f = t.files?.[0]; if (f) importData(f); t.value = ''; return; }
   });
+  // Any field losing focus may be the moment a finished workout is acted on.
+  content.addEventListener('focusout', scheduleCompletionCheck);
   content.addEventListener('input', e => {
     const t = e.target;
     if (t.dataset.f) { onSetFieldInput(t); return; }
@@ -2907,26 +3149,101 @@ function dismissWeekReview() {
   toast('Dismissed for this week');
 }
 
+/* Dry-runs the main screens for both profiles against a copy of a candidate
+ * state, so data that normalizes but still can't be displayed is rejected
+ * before it replaces anything. The live state is always restored. */
+function validateCandidate(candidate) {
+  const live = state;
+  try {
+    state = deepClone(candidate);
+    for (const profile of Object.keys(PROFILE_INFO)) {
+      state.profile = profile;
+      ensureSelection();
+      renderToday();
+      renderHistory();
+      renderSettings();
+    }
+  } finally {
+    state = live;
+  }
+}
+
+/* Validate fully, confirm, then commit only once it's saved — a failed save
+ * leaves the current data exactly as it was, and says so. */
 function importData(file) {
   const reader = new FileReader();
   reader.onload = () => {
+    let parsed, incoming;
     try {
-      const parsed = JSON.parse(reader.result);
-      const src = parsed && parsed.data && typeof parsed.data === 'object' ? parsed.data : parsed;
-      if (!src || typeof src !== 'object' || !(src.sessions || src.logs || src.drafts)) throw new Error('not a backup');
-      const incoming = pruneEmptySessions(migrateAny(parsed));
-      const count = Object.keys(incoming.sessions).length;
-      const existing = Object.keys(state.sessions).length;
-      if (!confirm(`Import backup${parsed.exportedAt ? ` from ${prettyDateTime(parsed.exportedAt)}` : ''} with ${count} workout${count === 1 ? '' : 's'}? This replaces ALL current data for both profiles (${existing} workout${existing === 1 ? '' : 's'}).`)) return;
-      state = incoming;
-      persist();
-      render();
-      toast(`Imported ${count} workout${count === 1 ? '' : 's'}`);
+      ({ parsed, state: incoming } = parseStateText(String(reader.result)));
+      validateCandidate(incoming);
     } catch (e) {
       toast('Import failed — not a valid backup file');
+      return;
     }
+    const count = Object.keys(incoming.sessions).length;
+    const existing = Object.keys(state.sessions).length;
+    if (!confirm(`Import backup${parsed.exportedAt ? ` from ${prettyDateTime(parsed.exportedAt)}` : ''} with ${count} workout${count === 1 ? '' : 's'}? This replaces ALL current data for both profiles (${existing} workout${existing === 1 ? '' : 's'}).`)) return;
+    if (!commitState(incoming)) {
+      alert(staleTab
+        ? 'Import cancelled: this data was just changed in another tab. Reload, then import again. Nothing was changed.'
+        : 'Import failed: the backup couldn\'t be saved on this device (storage full or unavailable). Nothing was changed.');
+      return;
+    }
+    completionBanner = null;
+    pendingCompletion = null;
+    render();
+    toast(`Imported ${count} workout${count === 1 ? '' : 's'}`);
   };
+  reader.onerror = () => toast('Import failed — the file couldn\'t be read');
   reader.readAsText(file);
+}
+function pickImportFile() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.addEventListener('change', () => { const f = input.files?.[0]; if (f) importData(f); });
+  input.click();
+}
+
+/* — Recovery banner and the stale-tab block (see section 2) — */
+
+function recoveryBannerHTML() {
+  const kept = recovery.savedAs
+    ? `A copy was kept on this device (${escapeHTML(recovery.savedAs)}).`
+    : 'There wasn’t room to keep a separate copy, so it was left untouched in place.';
+  const showing = recovery.source ? `older data found under ${escapeHTML(recovery.source)}` : 'an empty app';
+  return `<div><strong>Your saved workout data couldn’t be read.</strong> ${kept} Until you choose below, this shows ${showing} and <strong>nothing you enter is saved</strong>.</div>` +
+    `<div class="sys-acts"><button id="rcDownload">Download damaged copy</button><button id="rcImport">Import a backup</button><button id="rcKeep">Continue with what’s shown</button></div>`;
+}
+function renderSystemNotices() {
+  const banner = document.getElementById('sysBanner');
+  if (banner) {
+    banner.classList.toggle('hidden', !recovery);
+    banner.innerHTML = recovery ? recoveryBannerHTML() : '';
+  }
+  const block = document.getElementById('sysBlock');
+  if (block) {
+    block.classList.toggle('hidden', !staleTab);
+    block.innerHTML = staleTab
+      ? `<div class="sys-card"><h2>Updated in another tab</h2><p>Your workout data was just saved from another tab or window. This one has stopped saving, so it can’t overwrite that with older data. Anything entered here in the last moment may not have been saved.</p><button class="bp" id="sysReload">Reload with the latest data</button></div>`
+      : '';
+  }
+}
+function downloadDamagedCopy() {
+  if (!recovery) return;
+  downloadFile(`workout-damaged-${todayISO()}.json`, recovery.raw, 'application/json');
+}
+/* Explicit choice to replace the unreadable saved data with what's loaded. */
+function keepRecoveredState() {
+  if (!recovery) return;
+  const copy = recovery.savedAs
+    ? `The damaged copy stays on this device as ${recovery.savedAs}.`
+    : 'There is no other copy of the damaged data — download it first if you might need it.';
+  if (!confirm(`Replace the unreadable saved data with what's shown now? ${copy}`)) return;
+  if (!commitState(state)) { toast('Couldn’t save — nothing was replaced'); return; }
+  render();
+  toast('Saving again');
 }
 
 /* ═══ 13. Init ═══ */
