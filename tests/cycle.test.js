@@ -24,6 +24,7 @@ function seed(page, spec) {
     const date = addDaysISO(todayISO(), -(spec.daysAgo || 0));
     const s = newSession('dad', p.key, wk, date, spec.cycle, gym, block.id);
     s.exercises.forEach(x => {
+      if (spec.equipment && spec.equipment[x.actualName]) x.equipmentId = spec.equipment[x.actualName];
       const rows = (spec.sets || {})[x.actualName] || (spec.fill === false ? null : [spec.fill || ['100', '10', '2']]);
       if (!rows) return;
       x.sets.forEach((set, i) => {
@@ -234,6 +235,22 @@ async function patchSession(page, key, fn) {
   await pick(page, 'Upper B');
   const ubPulldown = await hint(page, 'Neutral-Grip Lat Pulldown');
   check('Upper B’s 3-set pulldown progresses from Upper A’s 2-set session at the top', /All sets hit 12 at ≥2 RIR → add 5 lb/.test(ubPulldown) && ubPulldown.includes('Suggested: 115 lb'), ubPulldown);
+  const byPhase = await page.evaluate(() => {
+    const p = PROGRAMS.upperLower6_20261021, t = p.workouts.upperB.exercises[0];
+    const at = week => { const s = newSession('dad', p.key, 'upperB', todayISO(), week, 'ymca', activeBlock(p).id); return cycleSuggestion(s.exercises[0], t, s); };
+    return { c1: at(1), c2: at(2) };
+  });
+  check('in Cycle 1 the same 12/12 at 2 RIR holds — the phase target is 3 RIR', /RIR dipped under 3/.test(byPhase.c1.label) && byPhase.c1.value === 110, JSON.stringify(byPhase.c1));
+  check('…while a build cycle applies the exercise’s own 2 RIR minimum', /add 5 lb/.test(byPhase.c2.label) && byPhase.c2.value === 115, JSON.stringify(byPhase.c2));
+  await exCard(page, 'Neutral-Grip Lat Pulldown').locator('.ex-eq').fill('Hoist 2');
+  await page.dispatchEvent('[data-eq="0"]', 'change');
+  await settle(page);
+  const named = await hint(page, 'Neutral-Grip Lat Pulldown');
+  check('naming a machine starts fresh calibration (unnamed history isn’t assumed equal)', /No comparable session yet/.test(named) && /Calibrate/.test(named), named);
+  await exCard(page, 'Neutral-Grip Lat Pulldown').locator('.ex-eq').fill('');
+  await page.dispatchEvent('[data-eq="0"]', 'change');
+  await settle(page);
+  check('clearing the machine name brings the gym history back', (await hint(page, 'Neutral-Grip Lat Pulldown')).includes('Suggested: 115 lb'));
   await page.click('[data-gym="office"]');
   await settle(page);
   await pick(page, 'Lower B');
@@ -309,7 +326,8 @@ async function patchSession(page, key, fn) {
       if (c === 3 && w === 'lowerB') {
         await page.evaluate(() => { for (const s of Object.values(state.sessions)) if (s.programKey === 'upperLower6_20261021' && s.week === 3 && s.workoutKey.startsWith('lowerB')) delete state.sessions[s.key]; persist(); });
       }
-      await seed(page, { workout: w, cycle: c, daysAgo: 0, complete: true, sets: { 'Barbell Bench Press': [[String(130 + c * 5), '10', '3']] }, checkin: CLEAN });
+      await seed(page, { workout: w, cycle: c, daysAgo: 0, complete: true, sets: { 'Barbell Bench Press': [[String(130 + c * 5), '10', '3']] }, checkin: CLEAN,
+        equipment: c === 4 && w === 'upperA' ? { 'Neutral-Grip Lat Pulldown': 'Hoist 2' } : undefined });
     }
   }
   await reload(page);
@@ -320,6 +338,7 @@ async function patchSession(page, key, fn) {
   check('the final workout completes the block', (await page.textContent('#completionBanner')).includes('block finished') && (await page.textContent('#hB')).includes('Complete'));
   const review = await page.textContent('#blockReview');
   check('the block review shows completion, lifts, symptoms and recovery', /Workouts completed/.test(review) && /Barbell Bench Press/.test(review) && /Sessions with shoulder symptoms/.test(review) && /Average sleep/.test(review), review.slice(0, 200));
+  check('the review keeps a named machine’s lift separate', review.includes('Neutral-Grip Lat Pulldown (YMCA · Hoist 2)') && review.includes('Neutral-Grip Lat Pulldown (YMCA)'));
   await page.click('#wcReopen');
   await settle(page);
   check('reopening the last workout un-completes the block', await page.locator('#blockReview').count() === 0 && (await page.textContent('#hB')).includes('Cycle 6/6'));

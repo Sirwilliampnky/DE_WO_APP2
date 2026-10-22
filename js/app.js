@@ -953,9 +953,10 @@ function currentCycleSession(p) {
  * matched across programs via the alias table, so dad's Hip Thrust
  * suggestions could come from daughter's history and vice versa). */
 /* opts (cycle/strict programs): gym — only sessions from that gym (machine
- * loads aren't comparable across gyms); equipmentId — skip entries logged on
- * a differently named machine; completedOnly / excludeDeload — the basis for
- * progression ("exclude warm-ups, deloads and incomplete sessions"). */
+ * loads aren't comparable across gyms); equipmentId — once a machine is
+ * named, only entries logged on that same named machine (unnamed history
+ * isn't assumed to be the same machine); completedOnly / excludeDeload — the
+ * basis for progression ("exclude warm-ups, deloads and incomplete sessions"). */
 function historyEntries(name, excludeKey, opts = {}) {
   const p = program();
   const strict = isStrictProgram(p);
@@ -974,7 +975,7 @@ function historyEntries(name, excludeKey, opts = {}) {
     session.exercises.forEach((x, i) => {
       if (strict ? x.actualName !== name : (!names.has(x.actualName) && !names.has(x.originalName))) return;
       const theirMachine = String(x.equipmentId || '').trim().toLowerCase();
-      if (wantMachine && theirMachine && theirMachine !== wantMachine) return;
+      if (wantMachine && theirMachine !== wantMachine) return;
       // Skip exercises with no performance data, or a newer partial session
       // (one stray keystroke on another exercise) would shadow older complete
       // history and blank out hints/suggestions/trends for everything else.
@@ -1221,7 +1222,9 @@ function benchSuggestion(t, entries, session) {
   return { value: w, tone: 'hold', label: `Hold ${w} lb — build both sets toward 10 at 3 RIR.${plateauNote(entries)}${limits}` };
 }
 
-function doubleProgression(x, t, session, entries, conv) {
+/* rirMin is the session's phase target — Cycle 1 requires 3 RIR even where
+ * the exercise's own build-phase minimum is lower. */
+function doubleProgression(x, t, session, entries, conv, rirMin) {
   const e = entries[0];
   const sets = workingSetsOf(e.exercise);
   const w = commonWeight(sets);
@@ -1249,22 +1252,22 @@ function doubleProgression(x, t, session, entries, conv) {
   const work = sets.slice(0, planned);
   const allTop = sets.length >= planned && work.every(s => Number(s.reps) >= repsMax);
   const rirs = work.map(s => String(s.rir).trim() === '' ? null : Number(s.rir));
-  const rirLow = rirs.some(r => r !== null && r < t.rirMin);
+  const rirLow = rirs.some(r => r !== null && r < rirMin);
   const rirUnknown = rirs.some(r => r === null);
   if (allTop && !rirLow) {
     const target = roundLoad(w + inc);
     if (t.progression === 'inclineReview' && x.actualName === t.name) {
       const capped = cap && target > cap;
-      return { value: capped ? w : target, tone: 'review', label: `${repsMax}/${repsMax} at ≥${t.rirMin} RIR — consider heavier DBs${capped ? ' (office DBs stop at 70 lb — the YMCA has heavier)' : ` (${target} lb)`} or a low-incline barbell press. Your call — the app won’t switch exercises automatically.` };
+      return { value: capped ? w : target, tone: 'review', label: `${repsMax}/${repsMax} at ≥${rirMin} RIR — consider heavier DBs${capped ? ' (office DBs stop at 70 lb — the YMCA has heavier)' : ` (${target} lb)`} or a low-incline barbell press. Your call — the app won’t switch exercises automatically.` };
     }
     if (cap && target > cap) {
       return ceiling && repsMax >= t.officeCeiling.repsMax
         ? { value: w, tone: 'review', label: `${repsMax}${side} at the office max (${cap} lb) — time to reassess: progress the load at the YMCA, or hold here.` }
         : { value: w, tone: 'hold', label: `Top of the range at the office max (${cap} lb) — keep the load and build reps.` };
     }
-    return { value: target, tone: 'up', label: `All sets hit ${repsMax}${side} at ≥${t.rirMin} RIR → add ${incrementLabel(conv, inc)}.${rirUnknown ? ' (RIR wasn’t logged on every set — only add load if each set really had that much in reserve.)' : ''}` };
+    return { value: target, tone: 'up', label: `All sets hit ${repsMax}${side} at ≥${rirMin} RIR → add ${incrementLabel(conv, inc)}.${rirUnknown ? ' (RIR wasn’t logged on every set — only add load if each set really had that much in reserve.)' : ''}` };
   }
-  if (allTop && rirLow) return { value: w, tone: 'hold', label: `Reps are there but RIR dipped under ${t.rirMin} — hold ${w} lb until it’s comfortable.${plateau}` };
+  if (allTop && rirLow) return { value: w, tone: 'hold', label: `Reps are there but RIR dipped under ${rirMin} — hold ${w} lb until it’s comfortable.${plateau}` };
   if (sets.slice(1, planned).some(s => Number(s.reps) < t.repsMin)) {
     return { value: w, tone: 'hold', label: `Later sets dropped below ${t.repsMin} — take the full ${formatSeconds(t.rest)} rest; lower the load only if it happens again.${plateau}` };
   }
@@ -1286,7 +1289,7 @@ function cycleSuggestion(x, t, session) {
   if (!entries.length) {
     return { value: '', tone: 'info', calibrating: true, label: `Calibrate: choose a load from easy warm-ups for ${tg.repsMin}–${tg.repsMax} clean reps at ${rirText(tg)} RIR. The RIR target beats any suggested number.` };
   }
-  const s = t.progression === 'benchTwoSession' && x.actualName === t.name ? benchSuggestion(t, entries, session) : doubleProgression(x, t, session, entries, conv);
+  const s = t.progression === 'benchTwoSession' && x.actualName === t.name ? benchSuggestion(t, entries, session) : doubleProgression(x, t, session, entries, conv, tg.rirMin);
   const cap = officeCapFor(session, conv);
   if (cap && s.value !== '' && s.value > cap) s.value = cap;
   return s;
@@ -1739,10 +1742,14 @@ function blockReviewHTML(p, block) {
     s.exercises.forEach((x, i) => {
       const t = exerciseTemplate(s, i);
       if (!t || t.type !== 'compound' || !workingSetsOf(x).length) return;
+      // Machine loads only line up within one gym and one named machine.
       const machine = MACHINE_CONVENTIONS.has(conventionForName(p, x.actualName));
-      const id = machine ? `${x.actualName} (${s.gymMode === 'office' ? 'Office' : 'YMCA'})` : x.actualName;
+      const gym = s.gymMode === 'office' ? 'Office' : 'YMCA';
+      const eq = machine ? String(x.equipmentId || '').trim() : '';
+      const id = machine ? `${x.actualName}|${gym}|${eq.toLowerCase()}` : x.actualName;
+      const name = machine ? `${x.actualName} (${gym}${eq ? ` · ${eq}` : ''})` : x.actualName;
       const entry = { label: weekLabelFor(s), sets: formatSets(x.sets) };
-      if (!lifts.has(id)) lifts.set(id, { first: entry, last: entry });
+      if (!lifts.has(id)) lifts.set(id, { name, first: entry, last: entry });
       else lifts.get(id).last = entry;
     });
   }
@@ -1761,7 +1768,7 @@ function blockReviewHTML(p, block) {
     row('Workouts completed', `${completed.length} (incl. ${sessions.filter(s => s.week === 0 && s.completedAt).length} deload)`) +
     row('Working sets logged (cycles 1–6)', planned ? `${logged}/${planned} (${Math.round((logged / planned) * 100)}%)` : '—') +
     `<span class="lbl mt8">Main lifts — first → latest</span>` +
-    ([...lifts.entries()].map(([name, v]) => row(name, `${v.first.sets} (${v.first.label}) → ${v.last.sets} (${v.last.label})`)).join('') || row('No compound lifts logged', '—')) +
+    ([...lifts.values()].map(v => row(v.name, `${v.first.sets} (${v.first.label}) → ${v.last.sets} (${v.last.label})`)).join('') || row('No compound lifts logged', '—')) +
     `<span class="lbl mt8">Symptoms</span>` +
     row('Sessions with shoulder symptoms', String(shoulder)) + row('Catching or repositioning', String(catching)) +
     row('Sessions with back symptoms', String(back)) + row('Next-morning shoulder unknown', String(unknownNextDay)) +
