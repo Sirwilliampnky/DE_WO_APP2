@@ -12,17 +12,19 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700;9..40,800&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=6" />
+  <link rel="stylesheet" href="css/styles.css?v=8" />
 </head>
 <body>
 <div id="gate" class="gate hidden">
   <h1>Workout</h1>
   <p>Who's training today?</p>
   <div class="gate-bs">
-    <button class="gate-b" data-pf="dad"><strong>Upper / Lower</strong><span>12-week hypertrophy</span></button>
+    <button class="gate-b" data-pf="dad"><strong>Upper / Lower</strong><span>12-week or six-cycle programs</span></button>
     <button class="gate-b" data-pf="daughter"><strong>Glute Split</strong><span>Glute / Pull / Legs / Push</span></button>
   </div>
 </div>
+<div id="sysBanner" class="sys-bn hidden" role="alert"></div>
+<div id="sysBlock" class="sys-block hidden" role="alertdialog" aria-modal="true"></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <div id="restAlert" class="rest-alert hidden"></div>
 <div class="app">
@@ -42,9 +44,8 @@
       </div>
       <button class="chip" id="aBtn" title="Resume or pick the next workout">Next</button>
       <button class="chip" id="tBtn" title="Jump to today's date">Today</button>
-      <button class="chip" id="gBtn" title="Toggle gym">Gym: YMCA</button>
-      <div style="flex:1"></div>
-      <button class="chip" id="pBtn" title="Switch profile" aria-label="Switch profile">⇄ Profile</button>
+      <button class="chip" id="gBtn" title="Toggle gym"><span class="chip-lbl">Gym: </span>YMCA</button>
+      <button class="chip" id="pBtn" title="Switch profile" aria-label="Switch profile">⇄<span class="chip-lbl"> Profile</span></button>
     </div>
   </div>
   <div class="tabs">
@@ -69,7 +70,7 @@
   </div>
   <div class="tmr-tk"><div class="tmr-fl" id="tF"></div></div>
 </div>
-<script src="js/data.js?v=6"></script>
-<script src="js/app.js?v=6"></script>
+<script src="js/data.js?v=8"></script>
+<script src="js/app.js?v=8"></script>
 </body>
 </html>
